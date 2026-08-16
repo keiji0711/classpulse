@@ -1,0 +1,57 @@
+name: ClassPulse CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  applications:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: |
+            web/package-lock.json
+            mobile/package-lock.json
+      - name: Install web dependencies
+        run: npm ci
+        working-directory: web
+      - name: Test web application
+        run: npm test
+        working-directory: web
+      - name: Build web application
+        run: npm run build
+        working-directory: web
+      - name: Lint complete web application
+        run: npm run lint
+        working-directory: web
+      - name: Install mobile dependencies
+        run: npm ci
+        working-directory: mobile
+      - name: Type-check mobile application
+        run: npx tsc --noEmit
+        working-directory: mobile
+
+  database:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: supabase/setup-cli@v1
+        with:
+          version: latest
+      - name: Start local Supabase
+        run: supabase start
+      - name: Rebuild database from migrations
+        run: supabase db reset --local
+      - name: Lint application database schema
+        run: supabase db lint --local --schema public --level warning --fail-on error
+      - name: Run database security regression checks
+        run: supabase test db supabase/tests/security_regression.sql

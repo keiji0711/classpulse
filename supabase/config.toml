@@ -1,0 +1,48 @@
+project_id = "classpulse"
+
+# Parent sessions are ClassPulse JWTs signed with APP_JWT_SECRET, not Supabase
+# Auth JWTs. Gateway verification is disabled only for these functions; each
+# handler verifies the parent token itself before any service-role operation.
+[functions.parent-login]
+verify_jwt = false
+
+[functions.get-student-feed]
+verify_jwt = false
+
+[functions.get-student-grades]
+verify_jwt = false
+
+[functions.get-student-exam-scores]
+verify_jwt = false
+
+[functions.get-student-assessments]
+verify_jwt = false
+
+[functions.parent-access-status]
+verify_jwt = false
+
+[functions.sync-revenuecat-access]
+verify_jwt = false
+
+[functions.save-parent-contact]
+verify_jwt = false
+
+[functions.set-parent-pin]
+verify_jwt = false
+
+[functions.update-push-token]
+verify_jwt = false
+
+[functions.support-list-thread]
+verify_jwt = false
+
+[functions.support-send-message]
+verify_jwt = false
+
+# PayMongo calls this endpoint without a Supabase session and is authenticated
+# by its webhook signature inside the handler.
+[functions.paymongo-webhook]
+verify_jwt = false
+
+[functions.reliability-worker]
+verify_jwt = false

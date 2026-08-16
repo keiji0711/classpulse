@@ -1,0 +1,66 @@
+name: Encrypted Database Backup
+
+on:
+  schedule:
+    - cron: "17 18 * * *"
+  workflow_dispatch:
+
+concurrency:
+  group: classpulse-production-backup
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  backup:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: supabase/setup-cli@v1
+        with:
+          version: latest
+
+      - name: Validate backup secrets
+        env:
+          SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+          BACKUP_PASSPHRASE: ${{ secrets.BACKUP_PASSPHRASE }}
+        run: |
+          test -n "$SUPABASE_DB_URL"
+          test -n "$BACKUP_PASSPHRASE"
+          test "${#BACKUP_PASSPHRASE}" -ge 24
+
+      - name: Export roles, schema, and data
+        env:
+          SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+        run: |
+          mkdir -p backup
+          supabase db dump --db-url "$SUPABASE_DB_URL" --role-only -f backup/roles.sql
+          supabase db dump --db-url "$SUPABASE_DB_URL" -f backup/schema.sql
+          supabase db dump --db-url "$SUPABASE_DB_URL" --data-only --use-copy -f backup/data.sql
+          test -s backup/schema.sql
+          test -s backup/data.sql
+          printf 'created_at_utc=%s\nworkflow_run=%s\n' "$(date -u +%FT%TZ)" "$GITHUB_RUN_ID" > backup/manifest.txt
+
+      - name: Encrypt backup before upload
+        env:
+          BACKUP_PASSPHRASE: ${{ secrets.BACKUP_PASSPHRASE }}
+        run: |
+          tar -czf classpulse-database.tar.gz backup
+          gpg --batch --yes --pinentry-mode loopback --passphrase "$BACKUP_PASSPHRASE" --symmetric --cipher-algo AES256 --output classpulse-database.tar.gz.gpg classpulse-database.tar.gz
+          sha256sum classpulse-database.tar.gz.gpg > classpulse-database.tar.gz.gpg.sha256
+          test -s classpulse-database.tar.gz.gpg
+          rm -rf backup classpulse-database.tar.gz
+
+      - name: Store encrypted backup
+        uses: actions/upload-artifact@v4
+        with:
+          name: classpulse-database-${{ github.run_id }}
+          path: |
+            classpulse-database.tar.gz.gpg
+            classpulse-database.tar.gz.gpg.sha256
+          if-no-files-found: error
+          retention-days: 30
+

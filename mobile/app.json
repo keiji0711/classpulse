@@ -1,0 +1,63 @@
+{
+  "expo": {
+    "owner": "dexter104",
+    "name": "ClassPulse",
+    "slug": "mobile",
+    "scheme": "classpulse",
+    "version": "1.1.0",
+    "orientation": "portrait",
+    "icon": "./assets/classPulseLogo.png",
+    "userInterfaceStyle": "light",
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.myclasspulse.app"
+    },
+    "android": {
+      "softwareKeyboardLayoutMode": "resize",
+      "googleServicesFile": "./google-services.json",
+      "adaptiveIcon": {
+        "backgroundColor": "#FFFFFF",
+        "foregroundImage": "./assets/classPulseLogo.png"
+      },
+      "predictiveBackGestureEnabled": false,
+      "package": "myClassPulse.com",
+      "permissions": [
+        "INTERNET",
+        "com.android.vending.BILLING",
+        "RECEIVE_BOOT_COMPLETED",
+        "VIBRATE",
+        "POST_NOTIFICATIONS"
+      ]
+    },
+    "plugins": [
+      [
+        "expo-notifications",
+        {
+          "icon": "./assets/classPulseLogo.png",
+          "color": "#0f766e"
+        }
+      ],
+      [
+        "expo-splash-screen",
+        {
+          "image": "./assets/splash-icon.png",
+          "resizeMode": "contain",
+          "backgroundColor": "#ffffff"
+        }
+      ],
+      "expo-font",
+      "expo-web-browser"
+    ],
+    "web": {
+      "favicon": "./assets/favicon.png"
+    },
+    "extra": {
+      "supabaseUrl": "https://qqjaprrpstbqjlxghoot.supabase.co",
+      "supabaseAnonKey": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFxamFwcnJwc3RicWpseGdob290Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzM0NTg3MjAsImV4cCI6MjA4OTAzNDcyMH0.l6V505BPrzMtf1CrtfORxFMmRljYANY6XQHmMCLIHOs",
+      "revenueCatAndroidApiKey": "goog_wTdbXnQTMPFCZbFIBqBGbQMsKhn",
+      "eas": {
+        "projectId": "a5432562-a570-46fe-a674-2535e33497b3"
+      }
+    }
+  }
+}

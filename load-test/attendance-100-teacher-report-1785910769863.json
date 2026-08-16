@@ -1,0 +1,89 @@
+{
+  "created_at": "2026-08-05T06:19:29.862Z",
+  "instructors": 100,
+  "classroom_waves": 4,
+  "schedules": 400,
+  "students": 20000,
+  "attendance_rows": 20000,
+  "wave_durations_ms": [
+    312330.3,
+    14225,
+    92070.1,
+    211711.6
+  ],
+  "rollback_protected": true,
+  "metrics": [
+    {
+      "name": "Instructor login",
+      "operations": 100,
+      "successful": 100,
+      "failed": 0,
+      "average_ms": 1671.2,
+      "p50_ms": 1869.9,
+      "p95_ms": 2400.2,
+      "p99_ms": 32856.1,
+      "max_ms": 32856.1,
+      "errors": []
+    },
+    {
+      "name": "Roster load",
+      "operations": 400,
+      "successful": 400,
+      "failed": 0,
+      "average_ms": 3998.1,
+      "p50_ms": 2633.5,
+      "p95_ms": 5416.5,
+      "p99_ms": 11448.9,
+      "max_ms": 309859.8,
+      "errors": []
+    },
+    {
+      "name": "Atomic classroom save",
+      "operations": 400,
+      "successful": 400,
+      "failed": 0,
+      "average_ms": 1415.8,
+      "p50_ms": 621.1,
+      "p95_ms": 2417.2,
+      "p99_ms": 3655.9,
+      "max_ms": 206939,
+      "errors": []
+    },
+    {
+      "name": "Saved classroom reopen",
+      "operations": 400,
+      "successful": 400,
+      "failed": 0,
+      "average_ms": 659.8,
+      "p50_ms": 267.7,
+      "p95_ms": 1379.7,
+      "p99_ms": 2593.4,
+      "max_ms": 65870.4,
+      "errors": []
+    },
+    {
+      "name": "Taken-schedule summary",
+      "operations": 100,
+      "successful": 100,
+      "failed": 0,
+      "average_ms": 3742.7,
+      "p50_ms": 3870.8,
+      "p95_ms": 4910.3,
+      "p99_ms": 5671.9,
+      "max_ms": 5671.9,
+      "errors": []
+    },
+    {
+      "name": "Paginated history",
+      "operations": 100,
+      "successful": 100,
+      "failed": 0,
+      "average_ms": 980.8,
+      "p50_ms": 847.6,
+      "p95_ms": 2062.2,
+      "p99_ms": 4199,
+      "max_ms": 4199,
+      "errors": []
+    }
+  ]
+}

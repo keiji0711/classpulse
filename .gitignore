@@ -1,0 +1,49 @@
+# ── Environment / Secrets ──────────────────────────────
+.env
+.env.*
+.env.local
+.env.production
+!.env.example
+
+# ── Firebase service account keys (NEVER commit) ──────
+*-firebase-adminsdk-*.json
+serviceAccount*.json
+
+# ── Node ───────────────────────────────────────────────
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# ── OS files ───────────────────────────────────────────
+.DS_Store
+Thumbs.db
+
+# ── IDE ────────────────────────────────────────────────
+.vscode/*
+!.vscode/extensions.json
+.idea/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+# ── Build artifacts ────────────────────────────────────
+dist/
+build/
+mobile/dist-*/
+*.aab
+*.apk
+
+# Local tool caches and generated previews
+.expo/
+.vite/
+.wrangler/
+canva-preview-*.png
+
+# Machine-specific tool state
+.claude/settings.local.json
+supabase/.temp/
+web/supabase/.temp/
+.git-backups/

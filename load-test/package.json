@@ -1,0 +1,19 @@
+{
+  "name": "classpulse-load-test",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "seed": "node seed-synthetic-data.mjs",
+    "test": "node run-load-test.mjs",
+    "test:attendance-workflow": "node run-attendance-workflow-test.mjs",
+    "test:100-teachers": "node run-100-teacher-attendance-test.mjs",
+    "test:100-saves": "node run-100-concurrent-attendance-saves.mjs",
+    "cleanup": "node cleanup-synthetic-data.mjs",
+    "cleanup:school-data": "node cleanup-school-data.mjs",
+    "full": "node seed-synthetic-data.mjs && node run-load-test.mjs && node cleanup-synthetic-data.mjs"
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "^2.49.0"
+  }
+}
