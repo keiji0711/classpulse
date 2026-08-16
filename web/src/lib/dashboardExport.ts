@@ -3,10 +3,11 @@ import { isRuntimeFeatureEnabled } from './runtimeEntitlements';
 export type DashboardTone = 'teal' | 'green' | 'blue' | 'amber' | 'red' | 'slate';
 export interface DashboardMetric { label: string; value: string | number; tone?: DashboardTone; progress?: number; }
 export interface DashboardInsight { type: 'critical' | 'warning' | 'info' | 'success'; message: string; }
-export interface DashboardChart { type: 'line' | 'bar' | 'donut'; title: string; labels: string[]; values: number[]; suffix?: string; colors?: string[]; }
+export interface DashboardChart { type: 'line' | 'bar' | 'donut'; title: string; labels: string[]; values: number[]; suffix?: string; colors?: string[]; benchmark?: { value: number; label: string }; }
 export interface DashboardTableSheet { name: string; title: string; subtitle?: string; headers: string[]; rows: (string | number | boolean)[][]; widths?: number[]; }
 export interface DashboardWorkbookOptions {
   title: string; subtitle: string; generatedBy?: string;
+  organizationName?: string; organizationId?: string; logoUrl?: string;
   metadata?: { label: string; value: string | number }[];
   metrics: DashboardMetric[]; insights?: DashboardInsight[]; charts?: DashboardChart[]; sheets: DashboardTableSheet[];
 }
@@ -24,6 +25,24 @@ function safeFileName(value: string) {
 
 function generatedLabel() {
   return new Intl.DateTimeFormat('en-PH', { year: 'numeric', month: 'long', day: 'numeric', hour: 'numeric', minute: '2-digit', timeZone: 'Asia/Manila', timeZoneName: 'short' }).format(new Date());
+}
+
+async function loadLogo(url: string) {
+  const response = await fetch(url);
+  if (!response.ok) throw new Error('Logo could not be loaded.');
+  const blob = await response.blob();
+  if (blob.type === 'image/png' || blob.type === 'image/jpeg') {
+    return await new Promise<string>((resolve, reject) => {
+      const reader = new FileReader(); reader.onload = () => resolve(String(reader.result)); reader.onerror = () => reject(reader.error); reader.readAsDataURL(blob);
+    });
+  }
+  const bitmap = await createImageBitmap(blob), canvas = document.createElement('canvas');
+  canvas.width = 240; canvas.height = 240;
+  const context = canvas.getContext('2d');
+  if (!context) throw new Error('Logo could not be rendered.');
+  const scale = Math.min(210 / bitmap.width, 210 / bitmap.height), width = bitmap.width * scale, height = bitmap.height * scale;
+  context.clearRect(0, 0, 240, 240); context.drawImage(bitmap, (240 - width) / 2, (240 - height) / 2, width, height); bitmap.close();
+  return canvas.toDataURL('image/png');
 }
 
 function chartCanvas(chart: DashboardChart) {
@@ -44,7 +63,7 @@ function chartCanvas(chart: DashboardChart) {
 function drawCartesian(context: CanvasRenderingContext2D, chart: DashboardChart) {
   const left = 75, right = 35, top = 90, bottom = 75;
   const plotWidth = 1200 - left - right, plotHeight = 520 - top - bottom;
-  const maxValue = Math.max(1, ...chart.values) * 1.12;
+  const maxValue = Math.max(1, ...chart.values, chart.benchmark?.value ?? 0) * 1.12;
   context.font = '16px Arial'; context.textAlign = 'right';
   for (let step = 0; step <= 4; step += 1) {
     const value = maxValue * (4 - step) / 4, y = top + plotHeight * step / 4;
@@ -52,6 +71,13 @@ function drawCartesian(context: CanvasRenderingContext2D, chart: DashboardChart)
     context.fillStyle = '#64748b'; context.fillText(`${value.toFixed(value < 10 ? 1 : 0)}${chart.suffix ?? ''}`, left - 10, y + 5);
   }
   const primary = chart.colors?.[0] ?? '#0f766e', count = chart.values.length;
+  if (chart.benchmark && chart.benchmark.value <= maxValue) {
+    const benchmarkY = top + plotHeight - chart.benchmark.value / maxValue * plotHeight;
+    context.save(); context.setLineDash([12, 8]); context.strokeStyle = '#64748b'; context.lineWidth = 2;
+    context.beginPath(); context.moveTo(left, benchmarkY); context.lineTo(1200 - right, benchmarkY); context.stroke(); context.restore();
+    context.fillStyle = '#475569'; context.textAlign = 'right'; context.font = '600 14px Arial';
+    context.fillText(`${chart.benchmark.label} ${chart.benchmark.value}${chart.suffix ?? ''}`, 1200 - right, benchmarkY - 8);
+  }
   if (chart.type === 'bar') {
     const gap = Math.max(8, plotWidth / count * 0.18), barWidth = Math.max(12, (plotWidth - gap * (count + 1)) / count);
     chart.values.forEach((value, index) => {
@@ -105,12 +131,18 @@ export async function downloadDashboardWorkbook(fileName: string, options: Dashb
   workbook.creator = 'ClassPulse'; workbook.title = options.title; workbook.subject = options.subtitle; workbook.created = new Date(); workbook.modified = new Date();
   const overview = workbook.addWorksheet('Executive Overview', { views: [{ state: 'frozen', ySplit: 6 }], pageSetup: { orientation: 'landscape', fitToPage: true, fitToWidth: 1, fitToHeight: 0, margins: { left: 0.3, right: 0.3, top: 0.5, bottom: 0.5, header: 0.2, footer: 0.2 } } });
   for (let column = 1; column <= 12; column += 1) overview.getColumn(column).width = 13;
-  overview.mergeCells('A1:L2');
-  const title = overview.getCell('A1'); title.value = options.title; title.font = { bold: true, size: 22, color: { argb: 'FFFFFFFF' } }; title.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF075F68' } }; title.alignment = { vertical: 'middle' };
-  overview.getRow(1).height = 25; overview.getRow(2).height = 25; overview.mergeCells('A3:L3');
-  overview.getCell('A3').value = options.subtitle; overview.getCell('A3').font = { italic: true, size: 11, color: { argb: 'FF475569' } }; overview.getCell('A3').fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFECFEFF' } };
+  overview.mergeCells('A1:B3'); overview.mergeCells('C1:L2');
+  const title = overview.getCell('C1'); title.value = options.organizationName ? `${options.organizationName}\n${options.title}` : options.title; title.font = { bold: true, size: 20, color: { argb: 'FFFFFFFF' } }; title.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF075F68' } }; title.alignment = { vertical: 'middle', wrapText: true };
+  for (let row = 1; row <= 3; row += 1) for (let column = 1; column <= 12; column += 1) overview.getCell(row, column).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: row <= 2 ? 'FF075F68' : 'FFECFEFF' } };
+  overview.getRow(1).height = 32; overview.getRow(2).height = 32; overview.getRow(3).height = 25; overview.mergeCells('C3:L3');
+  overview.getCell('C3').value = `${options.subtitle}${options.organizationId ? ` · DepEd School ID ${options.organizationId}` : ''}`; overview.getCell('C3').font = { italic: true, size: 11, color: { argb: 'FF475569' } }; overview.getCell('C3').fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFECFEFF' } };
+  try {
+    const logo = await loadLogo(options.logoUrl || `${window.location.origin}/classPulseLogo.png`);
+    const imageId = workbook.addImage({ base64: logo, extension: 'png' }); overview.addImage(imageId, 'A1:B3');
+  } catch { overview.getCell('A1').value = 'ClassPulse'; overview.getCell('A1').font = { bold: true, size: 14, color: { argb: 'FFFFFFFF' } }; overview.getCell('A1').alignment = { vertical: 'middle', horizontal: 'center' }; }
   overview.getCell('A4').value = 'Generated'; overview.getCell('B4').value = generatedLabel(); overview.getCell('E4').value = 'Prepared by'; overview.getCell('F4').value = options.generatedBy ?? 'School Administrator';
   (options.metadata ?? []).slice(0, 4).forEach((item, index) => { const column = index % 2 ? 7 : 1, row = 5 + Math.floor(index / 2); overview.getCell(row, column).value = item.label; overview.getCell(row, column + 1).value = item.value; overview.getCell(row, column).font = { bold: true, color: { argb: 'FF475569' } }; });
+  overview.mergeCells('A7:L7'); overview.getCell('A7').value = 'CONFIDENTIAL · FOR AUTHORIZED SCHOOL MANAGEMENT USE ONLY'; overview.getCell('A7').font = { bold: true, size: 9, color: { argb: 'FF64748B' } }; overview.getCell('A7').alignment = { horizontal: 'center' };
   const metricStart = 8;
   options.metrics.forEach((metric, index) => {
     const column = index % 4 * 3 + 1, row = metricStart + Math.floor(index / 4) * 3, tone = tones[metric.tone ?? 'teal'];

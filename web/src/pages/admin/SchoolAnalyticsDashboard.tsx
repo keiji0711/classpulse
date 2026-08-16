@@ -57,6 +57,7 @@ interface GradeRow {
   subject: { id: string; name: string; code: string } | null;
 }
 interface SubjectRow { id: string; name: string; code: string; grade_level: string; }
+interface SchoolProfile { name: string; deped_school_id: string | null; logo_url: string | null; }
 
 interface DailyAttendance {
   date: string;
@@ -263,6 +264,7 @@ export default function SchoolAnalyticsDashboard() {
   const [instructors, setInstructors] = useCachedState<InstructorRow[]>('admin-analytics-instructors', []);
   const [grades, setGrades] = useCachedState<GradeRow[]>('admin-analytics-grades', []);
   const [subjects, setSubjects] = useCachedState<SubjectRow[]>('admin-analytics-subjects', []);
+  const [schoolProfile, setSchoolProfile] = useState<SchoolProfile | null>(null);
 
   const dateFrom = useMemo(() => {
     const d = new Date();
@@ -324,7 +326,7 @@ export default function SchoolAnalyticsDashboard() {
       .lte('quarter', 3);
     if (yearId) gradQuery = gradQuery.eq('academic_year_id', yearId);
 
-    const [recRes, recResPrev, stuRes, secRes, insRes, gradRes, subRes] = await Promise.all([
+    const [recRes, recResPrev, stuRes, secRes, insRes, gradRes, subRes, schoolRes] = await Promise.all([
       recQuery,
       recQueryPrev,
       supabase
@@ -348,6 +350,7 @@ export default function SchoolAnalyticsDashboard() {
         .from('subjects')
         .select('id, name, code, grade_level')
         .eq('school_id', schoolId),
+      supabase.from('schools').select('name, deped_school_id, logo_url').eq('id', schoolId).single(),
     ]);
 
     setRecords((recRes.data as unknown as AttendanceRecord[]) ?? []);
@@ -357,6 +360,7 @@ export default function SchoolAnalyticsDashboard() {
     setInstructors((insRes.data as unknown as InstructorRow[]) ?? []);
     setGrades((gradRes.data as unknown as GradeRow[]) ?? []);
     setSubjects((subRes.data as unknown as SubjectRow[]) ?? []);
+    setSchoolProfile((schoolRes.data as SchoolProfile | null) ?? null);
     setLoading(false);
   }
 
@@ -925,6 +929,9 @@ export default function SchoolAnalyticsDashboard() {
       title: 'ClassPulse School Analytics Report',
       subtitle: `${activeYear?.name ?? 'Selected academic year'} · ${range}-day performance overview`,
       generatedBy: user?.full_name,
+      organizationName: schoolProfile?.name,
+      organizationId: schoolProfile?.deped_school_id ?? undefined,
+      logoUrl: schoolProfile?.logo_url ? (/^https?:\/\//i.test(schoolProfile.logo_url) ? schoolProfile.logo_url : supabase.storage.from('school-logos').getPublicUrl(schoolProfile.logo_url).data.publicUrl) : undefined,
       metadata: [
         { label: 'Report period', value: `${dateFrom} to ${dateTo}` },
         { label: 'Grade filter', value: gradeLevelFilter === 'all' ? 'All grade levels' : gradeLevelFilter },
@@ -941,6 +948,7 @@ export default function SchoolAnalyticsDashboard() {
           values: dailyTrend.slice(-30).map(day => day.rate),
           suffix: '%',
           colors: ['#0f766e'],
+          benchmark: { value: 90, label: 'School target' },
         },
         {
           type: 'donut',
@@ -952,17 +960,19 @@ export default function SchoolAnalyticsDashboard() {
         {
           type: 'bar',
           title: 'Attendance by Section',
-          labels: [...sectionRates].sort((a, b) => b.rate - a.rate).slice(0, 10).map(section => section.name),
-          values: [...sectionRates].sort((a, b) => b.rate - a.rate).slice(0, 10).map(section => section.rate),
+          labels: [...sectionRates].sort((a, b) => a.rate - b.rate).slice(0, 10).map(section => section.name),
+          values: [...sectionRates].sort((a, b) => a.rate - b.rate).slice(0, 10).map(section => section.rate),
           suffix: '%',
-          colors: ['#0ea5e9', '#14b8a6', '#22c55e', '#84cc16', '#eab308', '#f59e0b'],
+          colors: [...sectionRates].sort((a, b) => a.rate - b.rate).slice(0, 10).map(section => section.rate >= 95 ? '#16a34a' : section.rate >= 85 ? '#0284c7' : section.rate >= 75 ? '#d97706' : '#e11d48'),
+          benchmark: { value: 90, label: 'School target' },
         },
         {
           type: 'bar',
           title: 'Academic Performance by Subject',
           labels: [...subjectPerformance].sort((a, b) => b.averageGrade - a.averageGrade).slice(0, 10).map(subject => subject.code || subject.name),
           values: [...subjectPerformance].sort((a, b) => b.averageGrade - a.averageGrade).slice(0, 10).map(subject => subject.averageGrade),
-          colors: ['#8b5cf6', '#6366f1', '#3b82f6', '#06b6d4', '#14b8a6'],
+          colors: [...subjectPerformance].sort((a, b) => b.averageGrade - a.averageGrade).slice(0, 10).map(subject => subject.averageGrade >= 90 ? '#16a34a' : subject.averageGrade >= 80 ? '#2563eb' : subject.averageGrade >= 75 ? '#d97706' : '#e11d48'),
+          benchmark: { value: 75, label: 'Passing mark' },
         },
       ],
       sheets: [
