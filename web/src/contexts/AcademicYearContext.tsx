@@ -19,12 +19,13 @@ const AcademicYearContext = createContext<AcademicYearContextType | undefined>(u
 
 export function AcademicYearProvider({ children }: { children: ReactNode }) {
   const { user } = useAuth();
+  const schoolId = user?.school_id ?? null;
   const [years, setYears] = useState<AcademicYear[]>([]);
   const [activeYearId, setActiveYearId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
 
   const fetchYears = useCallback(async () => {
-    if (!user?.school_id) {
+    if (!schoolId) {
       setYears([]);
       setActiveYearId(null);
       setLoading(false);
@@ -34,20 +35,22 @@ export function AcademicYearProvider({ children }: { children: ReactNode }) {
     const { data } = await supabase
       .from('academic_years')
       .select('*')
-      .eq('school_id', user.school_id)
+      .eq('school_id', schoolId)
       .order('start_date', { ascending: false });
 
     const list = (data ?? []) as AcademicYear[];
     setYears(list);
 
-    // If no active year selected yet, pick the current one or the most recent
-    if (!activeYearId || !list.find(y => y.id === activeYearId)) {
-      const current = list.find(y => y.is_current);
-      setActiveYearId(current?.id ?? list[0]?.id ?? null);
-    }
+    // Resolve against the latest server list without closing over an old
+    // selection. This also recovers cleanly after login or a year rollover.
+    setActiveYearId((selectedId) => {
+      if (selectedId && list.some((year) => year.id === selectedId)) return selectedId;
+      const current = list.find((year) => year.is_current);
+      return current?.id ?? list[0]?.id ?? null;
+    });
 
     setLoading(false);
-  }, [user?.school_id]);
+  }, [schoolId]);
 
   useEffect(() => {
     fetchYears();
@@ -55,19 +58,21 @@ export function AcademicYearProvider({ children }: { children: ReactNode }) {
 
   // Listen for realtime changes
   useEffect(() => {
-    if (!user?.school_id) return;
+    if (!schoolId) return;
 
     const channel = supabase
       .channel('academic_years_changes')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'academic_years', filter: `school_id=eq.${user.school_id}` }, () => {
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'academic_years', filter: `school_id=eq.${schoolId}` }, () => {
         fetchYears();
       })
       .subscribe();
 
     return () => { supabase.removeChannel(channel); };
-  }, [user?.school_id, fetchYears]);
+  }, [schoolId, fetchYears]);
 
-  const activeYear = years.find(y => y.id === activeYearId) ?? null;
+  // The current-year fallback prevents a transient null selection between the
+  // year query completing and React applying the selected id update.
+  const activeYear = years.find(y => y.id === activeYearId) ?? years.find(y => y.is_current) ?? years[0] ?? null;
   const currentYear = years.find(y => y.is_current) ?? null;
   const isViewingCurrentYear = Boolean(activeYear && currentYear && activeYear.id === currentYear.id);
   const canWriteToActiveYear = isViewingCurrentYear && (!activeYear?.status || activeYear.status === 'active');

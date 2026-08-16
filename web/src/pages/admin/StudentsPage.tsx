@@ -26,7 +26,7 @@ function buildSearchPattern(rawValue: string) {
 
 export default function StudentsPage() {
   const { user } = useAuth();
-  const { activeYear, years, canWriteToActiveYear } = useAcademicYear();
+  const { activeYear, years, canWriteToActiveYear, loading: academicYearLoading } = useAcademicYear();
   const { showToast } = useToast();
   const [students, setStudents] = useCachedState<StudentRow[]>('admin-students', []);
   const [sections, setSections] = useCachedState<(Section & { strand?: Strand })[]>('admin-students-sections', []);
@@ -53,6 +53,7 @@ export default function StudentsPage() {
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(25);
   const debouncedSearchQuery = useDebouncedValue(searchQuery, 300);
+  const canManageStudents = !academicYearLoading && canWriteToActiveYear;
 
   useEffect(() => {
     setPage(1);
@@ -511,7 +512,7 @@ export default function StudentsPage() {
   const selectedTargetYear = years.find((y) => y.id === promotionTargetYearId);
   const isSameYear = promotionTargetYearId === activeYear?.id;
 
-  if (loading) return <div className="flex justify-center py-12"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary" /></div>;
+  if (loading || academicYearLoading) return <div className="flex justify-center py-12"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary" /></div>;
 
   return (
     <div className="space-y-6">
@@ -540,7 +541,7 @@ export default function StudentsPage() {
           <button onClick={exportExcel} disabled={students.length === 0} className="bg-sky-600 hover:bg-sky-700 text-white px-4 py-2 rounded-lg text-sm font-medium flex items-center gap-2 transition-colors disabled:opacity-50 cursor-pointer">
             <FileSpreadsheet size={16} /> Export Excel
           </button>
-          <button onClick={openCreate} disabled={!canWriteToActiveYear} className="bg-primary hover:bg-primary-dark text-white px-4 py-2 rounded-lg text-sm font-medium flex items-center gap-2 transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"><Plus size={16} /> Add Student</button>
+          <button onClick={openCreate} disabled={!canManageStudents} className="bg-primary hover:bg-primary-dark text-white px-4 py-2 rounded-lg text-sm font-medium flex items-center gap-2 transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"><Plus size={16} /> Add Student</button>
         </div>
       </div>
 
@@ -581,7 +582,7 @@ export default function StudentsPage() {
             </button>
             <button
               onClick={openPromoteModal}
-              disabled={!activeYear || !canWriteToActiveYear}
+              disabled={!activeYear || !canManageStudents}
               className="inline-flex items-center gap-2 rounded-lg bg-gradient-to-r from-amber-500 to-orange-500 px-4 py-2 text-sm font-semibold text-white shadow-sm transition-all hover:shadow-md hover:from-amber-600 hover:to-orange-600 disabled:cursor-not-allowed disabled:opacity-50 cursor-pointer"
             >
               <ArrowRightLeft size={15} /> Promote Selected
@@ -618,7 +619,7 @@ export default function StudentsPage() {
                     type="checkbox"
                     checked={students.length > 0 && selectedIds.size === students.length}
                     onChange={toggleSelectAll}
-                    disabled={!canWriteToActiveYear}
+                    disabled={!canManageStudents}
                     className="w-4 h-4 text-primary border-slate-300 rounded focus:ring-primary cursor-pointer"
                   />
                 </th>
@@ -640,7 +641,7 @@ export default function StudentsPage() {
                       type="checkbox"
                       checked={selectedIds.has(s.id)}
                       onChange={() => toggleSelect(s.id)}
-                      disabled={!canWriteToActiveYear}
+                      disabled={!canManageStudents}
                       className="w-4 h-4 text-primary border-slate-300 rounded focus:ring-primary cursor-pointer"
                     />
                   </td>
@@ -660,7 +661,7 @@ export default function StudentsPage() {
                       <div className="inline-flex items-center gap-1 rounded-xl border border-slate-200 bg-slate-50 p-1 shadow-sm">
                         <button
                           onClick={() => openEdit(s)}
-                          disabled={!canWriteToActiveYear}
+                          disabled={!canManageStudents}
                           className="flex h-8 w-8 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-500 transition-colors hover:border-primary/30 hover:bg-primary/5 hover:text-primary cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
                           title="Edit student"
                         >
@@ -668,7 +669,7 @@ export default function StudentsPage() {
                         </button>
                         <button
                           onClick={() => handleDelete(s.id)}
-                          disabled={!canWriteToActiveYear}
+                          disabled={!canManageStudents}
                           className="flex h-8 w-8 items-center justify-center rounded-lg border border-rose-200 bg-white text-rose-500 transition-colors hover:bg-rose-50 hover:border-rose-300 cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
                           title="Delete student"
                         >
