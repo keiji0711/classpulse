@@ -1,11 +1,12 @@
 import { useState, type FormEvent } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Plus, Pencil, X, CheckCircle2, CalendarRange, RotateCcw, ShieldCheck, Archive } from 'lucide-react';
+import { Plus, Pencil, X, CheckCircle2, CalendarRange, RotateCcw, ShieldCheck, Archive, Download, FileSpreadsheet } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../contexts/AuthContext';
 import { useAcademicYear } from '../../contexts/AcademicYearContext';
 import { useToast } from '../../contexts/ToastContext';
 import type { AcademicYear } from '../../types';
+import { downloadCsv, downloadExcel, type ExportColumn } from '../../lib/export';
 
 export default function AcademicYearsPage() {
   const { user } = useAuth();
@@ -80,6 +81,24 @@ export default function AcademicYearsPage() {
     showToast(`${year.name} archived.`);
   }
 
+  const exportColumns: ExportColumn<AcademicYear>[] = [
+    { header: 'Academic Year', value: (year) => year.name, width: 18 },
+    { header: 'Start Date', value: (year) => formatDate(year.start_date), width: 20 },
+    { header: 'End Date', value: (year) => formatDate(year.end_date), width: 20 },
+    { header: 'Status', value: (year) => year.status ?? (year.is_current ? 'Active' : 'Legacy'), width: 14 },
+    { header: 'Current Year', value: (year) => year.is_current ? 'Yes' : 'No', width: 14 },
+    { header: 'Created', value: (year) => year.created_at ? new Date(year.created_at).toLocaleDateString('en-PH') : '', width: 16 },
+  ];
+  const exportOptions = {
+    title: 'Academic Year Registry',
+    subtitle: 'Official school-year containers and lifecycle status',
+    metadata: [
+      { label: 'Total years', value: years.length },
+      { label: 'Current year', value: years.find((year) => year.is_current)?.name ?? 'None' },
+    ],
+    generatedBy: user?.full_name,
+  };
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between gap-3 flex-wrap">
@@ -88,6 +107,8 @@ export default function AcademicYearsPage() {
           <p className="mt-1 text-sm text-slate-500">Create year containers here, then use the audited workflow to finalize and activate them.</p>
         </div>
         <div className="flex items-center gap-2">
+          <button onClick={() => downloadCsv('academic-year-registry', years, exportColumns, exportOptions)} disabled={!years.length} className="flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-50"><Download size={16} /> CSV</button>
+          <button onClick={() => downloadExcel('academic-year-registry', 'Academic Years', years, exportColumns, exportOptions)} disabled={!years.length} className="flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-50"><FileSpreadsheet size={16} /> Excel</button>
           {years.length >= 2 && (
             <button onClick={() => navigate('/admin/year-end')} className="flex items-center gap-2 rounded-lg bg-amber-500 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-amber-600">
               <RotateCcw size={16} /> Open Year-End Workflow

@@ -1,7 +1,9 @@
 import { useEffect, useMemo, useState } from 'react';
-import { AlertTriangle, BookOpenCheck, Calculator, HeartPulse, Search } from 'lucide-react';
+import { AlertTriangle, BookOpenCheck, Calculator, HeartPulse, Search, Download, FileSpreadsheet } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import { useToast } from '../../contexts/ToastContext';
+import { useAuth } from '../../contexts/AuthContext';
+import { downloadCsv, downloadExcel, type ExportColumn } from '../../lib/export';
 
 type Period = 'bosy' | 'eosy';
 type Domain = 'literacy' | 'numeracy' | 'nutrition';
@@ -21,6 +23,7 @@ type MonitorRow = {
 const domains: Domain[] = ['literacy', 'numeracy', 'nutrition'];
 
 export default function LearnerAssessmentMonitorPage() {
+  const { user } = useAuth();
   const { showToast } = useToast();
   const [rows, setRows] = useState<MonitorRow[]>([]);
   const [loading, setLoading] = useState(true);
@@ -49,12 +52,39 @@ export default function LearnerAssessmentMonitorPage() {
     nutrition: total.nutrition + Number(row[`${period}_nutrition`]),
   }), { enrolled: 0, literacy: 0, numeracy: 0, nutrition: 0 }), [rows, period]);
 
+  const periodLabel = period === 'bosy' ? 'Beginning of School Year (BoSY)' : 'End of School Year (EoSY)';
+  const percentage = (value: number, total: number) => total ? Math.round(value / total * 1000) / 10 : 0;
+  const exportColumns: ExportColumn<MonitorRow>[] = [
+    { header: 'Grade Level', value: (row) => row.grade_level, width: 16 },
+    { header: 'Section', value: (row) => row.section_name, width: 22 },
+    { header: 'Enrolled', value: (row) => Number(row.enrolled), width: 12, numberFormat: '0' },
+    { header: 'Literacy Recorded', value: (row) => Number(row[`${period}_literacy`]), width: 18, numberFormat: '0' },
+    { header: 'Literacy Coverage (%)', value: (row) => percentage(Number(row[`${period}_literacy`]), Number(row.enrolled)), width: 22, numberFormat: '0.0' },
+    { header: 'Literacy Support', value: (row) => Number(row[`${period}_literacy_support`]), width: 18, numberFormat: '0' },
+    { header: 'Numeracy Recorded', value: (row) => Number(row[`${period}_numeracy`]), width: 19, numberFormat: '0' },
+    { header: 'Numeracy Coverage (%)', value: (row) => percentage(Number(row[`${period}_numeracy`]), Number(row.enrolled)), width: 23, numberFormat: '0.0' },
+    { header: 'Numeracy Support', value: (row) => Number(row[`${period}_numeracy_support`]), width: 19, numberFormat: '0' },
+    { header: 'Nutrition Recorded', value: (row) => Number(row[`${period}_nutrition`]), width: 19, numberFormat: '0' },
+    { header: 'Nutrition Coverage (%)', value: (row) => percentage(Number(row[`${period}_nutrition`]), Number(row.enrolled)), width: 23, numberFormat: '0.0' },
+    { header: 'Nutrition Support', value: (row) => Number(row[`${period}_nutrition_support`]), width: 19, numberFormat: '0' },
+  ];
+  const exportOptions = {
+    title: `${period === 'bosy' ? 'BoSY' : 'EoSY'} Learner Assessment Monitoring`,
+    subtitle: `${periodLabel} section-level completion and support signals`,
+    metadata: [
+      { label: 'Academic year', value: rows[0]?.academic_year_name ?? 'Current school year' },
+      { label: 'Search filter', value: search.trim() || 'All sections' },
+      { label: 'Privacy', value: 'Aggregated section data only' },
+    ],
+    generatedBy: user?.full_name,
+  };
+
   if (loading) return <div className="flex justify-center py-20"><div className="h-9 w-9 animate-spin rounded-full border-4 border-slate-200 border-t-primary" /></div>;
 
   return <div className="space-y-6">
     <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
       <div><h1 className="text-2xl font-bold text-slate-900">Learner Assessment Monitoring</h1><p className="mt-1 text-sm text-slate-500">Track DepEd BoSY and EoSY completion by section for {rows[0]?.academic_year_name ?? 'the current school year'}.</p></div>
-      <div className="inline-flex rounded-xl border border-slate-200 bg-white p-1 shadow-sm">{(['bosy', 'eosy'] as Period[]).map((value) => <button key={value} onClick={() => setPeriod(value)} className={`rounded-lg px-4 py-2 text-sm font-bold ${period === value ? 'bg-primary text-white' : 'text-slate-500 hover:bg-slate-50'}`}>{value === 'bosy' ? 'BoSY' : 'EoSY'}</button>)}</div>
+      <div className="flex flex-wrap items-center gap-2"><button onClick={() => downloadCsv(`${period}-learner-assessment-monitor`, visible, exportColumns, exportOptions)} disabled={!visible.length} className="flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-50"><Download size={16} /> CSV</button><button onClick={() => downloadExcel(`${period}-learner-assessment-monitor`, period.toUpperCase(), visible, exportColumns, exportOptions)} disabled={!visible.length} className="flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-50"><FileSpreadsheet size={16} /> Excel</button><div className="inline-flex rounded-xl border border-slate-200 bg-white p-1 shadow-sm">{(['bosy', 'eosy'] as Period[]).map((value) => <button key={value} onClick={() => setPeriod(value)} className={`rounded-lg px-4 py-2 text-sm font-bold ${period === value ? 'bg-primary text-white' : 'text-slate-500 hover:bg-slate-50'}`}>{value === 'bosy' ? 'BoSY' : 'EoSY'}</button>)}</div></div>
     </div>
     <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4"><Metric label="Enrolled learners" value={totals.enrolled} icon={<BookOpenCheck />} /><Metric label="Literacy recorded" value={totals.literacy} total={totals.enrolled} icon={<BookOpenCheck />} /><Metric label="Numeracy recorded" value={totals.numeracy} total={totals.enrolled} icon={<Calculator />} /><Metric label="Nutrition recorded" value={totals.nutrition} total={totals.enrolled} icon={<HeartPulse />} /></div>
     <div className="rounded-2xl border border-sky-200 bg-sky-50 p-4 text-sm text-sky-900">Teachers record official results. This monitoring page shows section-level completion and support counts only; it does not expose learner scores or health measurements.</div>

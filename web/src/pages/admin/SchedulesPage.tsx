@@ -6,7 +6,8 @@ import { useToast } from '../../contexts/ToastContext';
 import { useRealtimeRefresh } from '../../lib/useRealtimeRefresh';
 import { useCachedState, hasCached } from '../../lib/pageCache';
 import type { Schedule, Section, Subject, AppUser, DayOfWeek } from '../../types';
-import { Plus, Trash2, X, Clock, MapPin, User } from 'lucide-react';
+import { Plus, Trash2, X, Clock, MapPin, User, Download, FileSpreadsheet } from 'lucide-react';
+import { downloadCsv, downloadExcel, type ExportColumn } from '../../lib/export';
 
 const DAYS: DayOfWeek[] = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
 const DAY_SHORT: Record<DayOfWeek, string> = { monday: 'Mon', tuesday: 'Tue', wednesday: 'Wed', thursday: 'Thu', friday: 'Fri', saturday: 'Sat', sunday: 'Sun' };
@@ -215,6 +216,28 @@ export default function SchedulesPage() {
     if (viewInstructor !== 'all' && s.instructor_id !== viewInstructor) return false;
     return true;
   });
+  const scheduleExportRows = [...filtered].sort((a, b) => DAYS.indexOf(a.day_of_week) - DAYS.indexOf(b.day_of_week) || a.time_start.localeCompare(b.time_start));
+
+  const exportColumns: ExportColumn<Schedule>[] = [
+    { header: 'Day', value: (schedule) => capitalize(schedule.day_of_week), width: 12 },
+    { header: 'Start Time', value: (schedule) => formatTime(schedule.time_start), width: 14 },
+    { header: 'End Time', value: (schedule) => formatTime(schedule.time_end), width: 14 },
+    { header: 'Subject Code', value: (schedule) => schedule.subject?.code ?? '', width: 16 },
+    { header: 'Subject', value: (schedule) => schedule.subject?.name ?? '', width: 28 },
+    { header: 'Grade Level', value: (schedule) => schedule.section?.grade_level ?? '', width: 16 },
+    { header: 'Section', value: (schedule) => schedule.section?.name ?? '', width: 20 },
+    { header: 'Teacher', value: (schedule) => schedule.instructor?.full_name ?? '', width: 26 },
+    { header: 'Room', value: (schedule) => schedule.room ?? '', width: 16 },
+  ];
+  const exportOptions = {
+    title: 'Class Schedule',
+    subtitle: `Academic Year ${activeYear?.name ?? 'Not selected'}`,
+    metadata: [
+      { label: 'Section filter', value: viewSection === 'all' ? 'All sections' : sections.find((section) => section.id === viewSection)?.name ?? 'Selected section' },
+      { label: 'Teacher filter', value: viewInstructor === 'all' ? 'All teachers' : instructors.find((instructor) => instructor.id === viewInstructor)?.full_name ?? 'Selected teacher' },
+    ],
+    generatedBy: user?.full_name,
+  };
 
   // Group by day
   const byDay = new Map<DayOfWeek, Schedule[]>();
@@ -228,9 +251,13 @@ export default function SchedulesPage() {
   return (
     <div>
       {/* Header */}
-      <div className="flex items-center justify-between mb-6">
-        <h2 className="text-2xl font-bold text-slate-800">Schedules</h2>
-        <button onClick={openCreate} disabled={!canManageSchedules} className="bg-primary hover:bg-primary-dark text-white px-4 py-2 rounded-lg text-sm font-medium flex items-center gap-2 transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"><Plus size={16} /> Add Schedule</button>
+      <div className="flex flex-wrap items-center justify-between gap-3 mb-6">
+        <div><h2 className="text-2xl font-bold text-slate-800">Schedules</h2><p className="mt-1 text-sm text-slate-500">Weekly timetable for {activeYear?.name ?? 'the selected academic year'}.</p></div>
+        <div className="flex flex-wrap items-center gap-2">
+          <button onClick={() => downloadCsv('class-schedule', scheduleExportRows, exportColumns, exportOptions)} disabled={!filtered.length} className="flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-50"><Download size={16} /> CSV</button>
+          <button onClick={() => downloadExcel('class-schedule', 'Schedule', scheduleExportRows, exportColumns, exportOptions)} disabled={!filtered.length} className="flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-50"><FileSpreadsheet size={16} /> Excel</button>
+          <button onClick={openCreate} disabled={!canManageSchedules} className="bg-primary hover:bg-primary-dark text-white px-4 py-2 rounded-lg text-sm font-medium flex items-center gap-2 transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"><Plus size={16} /> Add Schedule</button>
+        </div>
       </div>
 
       {/* Filters */}

@@ -1,8 +1,10 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Banknote, CheckCircle2, Clock3, Search, ShieldCheck, Users } from 'lucide-react';
+import { Banknote, CheckCircle2, Clock3, Search, ShieldCheck, Users, Download, FileSpreadsheet } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import { useDebouncedValue } from '../../lib/useDebouncedValue';
 import { useToast } from '../../contexts/ToastContext';
+import { useAuth } from '../../contexts/AuthContext';
+import { downloadCsv, downloadExcel, type ExportColumn } from '../../lib/export';
 
 type CollectionSummary = {
   billing_month: string;
@@ -39,6 +41,7 @@ function currentMonthInput() {
 }
 
 export default function ParentCollectionsPage() {
+  const { user } = useAuth();
   const { showToast } = useToast();
   const [month, setMonth] = useState(currentMonthInput);
   const [search, setSearch] = useState('');
@@ -48,6 +51,7 @@ export default function ParentCollectionsPage() {
   const [rows, setRows] = useState<CollectionRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [verifying, setVerifying] = useState<Set<string>>(new Set());
+  const [exporting, setExporting] = useState(false);
 
   const billingMonth = `${month}-01`;
 
@@ -104,6 +108,74 @@ export default function ParentCollectionsPage() {
   const outstanding = Math.max(0, expected - Number(summary?.collected ?? 0) - Number(summary?.waived ?? 0) * Number(summary?.monthly_price ?? 20));
   const monthLabel = useMemo(() => new Date(`${billingMonth}T00:00:00`).toLocaleDateString('en-PH', { month: 'long', year: 'numeric' }), [billingMonth]);
 
+  const exportColumns: ExportColumn<CollectionRow>[] = [
+    { header: 'Student', value: (row) => row.student_name, width: 28 },
+    { header: 'LRN', value: (row) => row.lrn, width: 16 },
+    { header: 'Section', value: (row) => row.section_name, width: 22 },
+    { header: 'Guardian', value: (row) => row.guardian_name, width: 28 },
+    { header: 'Payment Status', value: (row) => row.payment_status, width: 17 },
+    { header: 'Amount Paid', value: (row) => Number(row.amount_paid), width: 16, numberFormat: '₱#,##0.00' },
+    { header: 'Collection Date', value: (row) => row.collected_at ? new Date(row.collected_at).toLocaleDateString('en-PH') : '', width: 18 },
+    { header: 'Collected By', value: (row) => row.collector_name, width: 24 },
+    { header: 'Remittance Status', value: (row) => row.payment_id ? row.remittance_status : '', width: 20 },
+    { header: 'Parent Access', value: (row) => row.access_enabled ? 'Enabled' : 'Disabled', width: 17 },
+  ];
+
+  async function fetchAllRowsForExport() {
+    const allRows: CollectionRow[] = [];
+    const exportPageSize = 100;
+    let offset = 0;
+    let expectedTotal = Number.MAX_SAFE_INTEGER;
+    while (offset < expectedTotal) {
+      const { data, error } = await supabase.rpc('get_school_parent_collection_rows', {
+        p_billing_month: billingMonth,
+        p_search: debouncedSearch,
+        p_limit: exportPageSize,
+        p_offset: offset,
+      });
+      if (error) throw error;
+      const batchRows = (data ?? []) as CollectionRow[];
+      if (!batchRows.length) break;
+      allRows.push(...batchRows);
+      expectedTotal = Number(batchRows[0]?.total_count ?? allRows.length);
+      offset += batchRows.length;
+      if (batchRows.length < exportPageSize) break;
+    }
+    return allRows;
+  }
+
+  async function exportCollections(format: 'csv' | 'excel') {
+    if (exporting) return;
+    setExporting(true);
+    try {
+      const exportRows = await fetchAllRowsForExport();
+      if (!exportRows.length) {
+        showToast('There are no collection records to export for this view.', 'warning');
+        return;
+      }
+      const options = {
+        title: 'Parent Collections and Remittance Report',
+        subtitle: `${monthLabel} parent app access collections`,
+        metadata: [
+          { label: 'Search filter', value: debouncedSearch || 'All students' },
+          { label: 'Eligible students', value: summary?.eligible ?? 0 },
+          { label: 'Paid accounts', value: summary?.paid ?? 0 },
+          { label: 'Waived accounts', value: summary?.waived ?? 0 },
+          { label: 'Collected amount', value: `PHP ${Number(summary?.collected ?? 0).toLocaleString('en-PH')}` },
+          { label: 'Verified amount', value: `PHP ${Number(summary?.verified ?? 0).toLocaleString('en-PH')}` },
+          { label: 'Outstanding amount', value: `PHP ${outstanding.toLocaleString('en-PH')}` },
+        ],
+        generatedBy: user?.full_name,
+      };
+      if (format === 'csv') downloadCsv(`parent-collections-${month}`, exportRows, exportColumns, options);
+      else await downloadExcel(`parent-collections-${month}`, 'Collections', exportRows, exportColumns, options);
+    } catch (exportError) {
+      showToast(exportError instanceof Error ? exportError.message : 'Unable to export parent collections.', 'error');
+    } finally {
+      setExporting(false);
+    }
+  }
+
   return (
     <div className="space-y-6">
       <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
@@ -111,10 +183,11 @@ export default function ParentCollectionsPage() {
           <h1 className="text-2xl font-bold text-slate-900">Parent Collections</h1>
           <p className="mt-1 text-sm text-slate-500">Verify teacher collections and monitor monthly parent app access.</p>
         </div>
-        <label className="text-xs font-bold uppercase tracking-wide text-slate-500">
-          Billing month
-          <input type="month" value={month} onChange={(event) => setMonth(event.target.value)} className="mt-1 block rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-800 outline-none focus:border-primary focus:ring-2 focus:ring-primary/20" />
-        </label>
+        <div className="flex flex-wrap items-end gap-2">
+          <button onClick={() => void exportCollections('csv')} disabled={exporting || loading} className="flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-50"><Download size={16} /> CSV</button>
+          <button onClick={() => void exportCollections('excel')} disabled={exporting || loading} className="flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-50"><FileSpreadsheet size={16} /> {exporting ? 'Preparing...' : 'Excel'}</button>
+          <label className="text-xs font-bold uppercase tracking-wide text-slate-500">Billing month<input type="month" value={month} onChange={(event) => setMonth(event.target.value)} className="mt-1 block rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-800 outline-none focus:border-primary focus:ring-2 focus:ring-primary/20" /></label>
+        </div>
       </div>
 
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">

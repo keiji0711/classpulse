@@ -1,11 +1,12 @@
 import { useEffect, useMemo, useState } from 'react';
-import { CheckCircle2, AlertTriangle, Lock, RefreshCw, Rocket, Users } from 'lucide-react';
+import { CheckCircle2, AlertTriangle, Lock, RefreshCw, Rocket, Users, Download, FileSpreadsheet } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../contexts/AuthContext';
 import { useAcademicYear } from '../../contexts/AcademicYearContext';
 import { useToast } from '../../contexts/ToastContext';
 import type { Section } from '../../types';
 import { buildSuggestedDecision, getNextGrade, validateYearEndDecisions, type YearEndDecision as Decision, type YearEndOutcome as Outcome } from '../../lib/schoolYearWorkflow';
+import { downloadCsv, downloadExcel, type ExportColumn } from '../../lib/export';
 
 type ReviewStudent = {
   enrollment_id: string;
@@ -23,6 +24,12 @@ type RolloverBatch = {
   target_year_id: string;
   status: 'processing' | 'finalized' | 'activated' | 'failed';
   summary: Record<string, number>;
+};
+
+type YearEndExportRow = ReviewStudent & {
+  outcome: string;
+  target_placement: string;
+  notes: string;
 };
 
 const OUTCOMES: { value: Outcome; label: string }[] = [
@@ -136,15 +143,40 @@ export default function YearEndWorkflowPage() {
       }
     }
 
+    const loadedBatch = (batchRes.data as RolloverBatch | null) ?? null;
+    const savedDecisions: Record<string, Decision> = {};
+    if (loadedBatch?.id) {
+      const { data: detailRows, error: detailsError } = await supabase
+        .from('school_year_rollover_details')
+        .select('student_id, outcome, target_section_id, notes')
+        .eq('batch_id', loadedBatch.id);
+      if (detailsError) {
+        setError(detailsError.message);
+        setLoading(false);
+        return;
+      }
+      for (const detail of detailRows ?? []) {
+        savedDecisions[detail.student_id] = {
+          outcome: detail.outcome as Outcome,
+          target_section_id: detail.target_section_id ?? '',
+          notes: detail.notes ?? '',
+        };
+      }
+    }
+
     setStudents(reviewRows);
     setSections(sectionRows);
     setMissingGradeCells(missing);
     setOpenInterventions(interventionsRes.count ?? 0);
     setTargetScheduleCount(schedulesRes.count ?? 0);
-    setBatch((batchRes.data as RolloverBatch | null) ?? null);
+    setBatch(loadedBatch);
     setDecisions((existing) => {
       const next: Record<string, Decision> = {};
       for (const student of reviewRows) {
+        if (savedDecisions[student.student_id]) {
+          next[student.student_id] = savedDecisions[student.student_id];
+          continue;
+        }
         if (existing[student.student_id]) {
           next[student.student_id] = existing[student.student_id];
           continue;
@@ -175,6 +207,36 @@ export default function YearEndWorkflowPage() {
     [students, decisions, targetYearId],
   );
   const canFinalize = validation.valid && missingGradeCells === 0;
+  const exportRows: YearEndExportRow[] = students.map((student) => {
+    const decision = decisions[student.student_id];
+    const targetSection = sections.find((section) => section.id === decision?.target_section_id);
+    return {
+      ...student,
+      outcome: OUTCOMES.find((outcome) => outcome.value === decision?.outcome)?.label ?? 'Pending review',
+      target_placement: targetSection ? `${targetSection.grade_level} - ${targetSection.name}` : 'No next enrollment',
+      notes: decision?.notes ?? '',
+    };
+  });
+  const exportColumns: ExportColumn<YearEndExportRow>[] = [
+    { header: 'Student', value: (row) => row.name, width: 28 },
+    { header: 'LRN', value: (row) => row.lrn, width: 16 },
+    { header: 'Current Grade', value: (row) => row.grade_level, width: 16 },
+    { header: 'Current Section', value: (row) => row.section_name, width: 20 },
+    { header: 'Outcome', value: (row) => row.outcome, width: 18 },
+    { header: 'Target Placement', value: (row) => row.target_placement, width: 28 },
+    { header: 'Notes', value: (row) => row.notes, width: 38 },
+  ];
+  const exportOptions = {
+    title: 'Year-End Student Outcomes',
+    subtitle: `${sourceYear?.name ?? 'Source year'} to ${targetYear?.name ?? 'Target year not selected'}`,
+    metadata: [
+      { label: 'Workflow status', value: batch?.status ?? 'Reviewing' },
+      { label: 'Pending decisions', value: validation.pending },
+      { label: 'Missing target sections', value: validation.missingTargets },
+      { label: 'Missing grade cells', value: missingGradeCells },
+    ],
+    generatedBy: user?.full_name,
+  };
 
   async function finalizeYear() {
     if (!sourceYear || !targetYear || !canFinalize || batch) return;
@@ -219,9 +281,9 @@ export default function YearEndWorkflowPage() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h2 className="text-2xl font-bold text-slate-800">Year-End Workflow</h2>
-        <p className="mt-1 text-sm text-slate-500">Review every student outcome, finalize atomically, then activate the new academic year.</p>
+      <div className="flex flex-wrap items-end justify-between gap-3">
+        <div><h2 className="text-2xl font-bold text-slate-800">Year-End Workflow</h2><p className="mt-1 text-sm text-slate-500">Review every student outcome, finalize atomically, then activate the new academic year.</p></div>
+        <div className="flex gap-2"><button onClick={() => downloadCsv('year-end-student-outcomes', exportRows, exportColumns, exportOptions)} disabled={!exportRows.length || loading} className="flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-50"><Download size={16} /> CSV</button><button onClick={() => downloadExcel('year-end-student-outcomes', 'Student Outcomes', exportRows, exportColumns, exportOptions)} disabled={!exportRows.length || loading} className="flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-50"><FileSpreadsheet size={16} /> Excel</button></div>
       </div>
 
       <div className="grid gap-3 md:grid-cols-3">
