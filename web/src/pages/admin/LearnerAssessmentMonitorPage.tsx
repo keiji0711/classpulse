@@ -30,16 +30,39 @@ export default function LearnerAssessmentMonitorPage() {
   const [search, setSearch] = useState('');
   const [period, setPeriod] = useState<Period>('bosy');
 
-  useEffect(() => { void (async () => {
-    const { data, error } = await supabase.rpc('get_school_assessment_monitor');
-    if (error) showToast(error.message, 'error');
-    const normalized = ((data ?? []) as Record<string, unknown>[]).map((row) =>
-      Object.fromEntries(Object.entries(row).map(([key, value]) => [key, typeof value === 'string' && /^\d+$/.test(value) && !key.endsWith('_id') ? Number(value) : value])) as MonitorRow,
-    );
-    normalized.sort((a, b) => a.grade_level.localeCompare(b.grade_level, undefined, { numeric: true }) || a.section_name.localeCompare(b.section_name));
-    setRows(normalized);
-    setLoading(false);
-  })(); }, [showToast]);
+  useEffect(() => {
+    let active = true;
+
+    void (async () => {
+      try {
+        const { data, error } = await supabase.rpc('get_school_assessment_monitor');
+        if (error) throw error;
+
+        const normalized = ((data ?? []) as Record<string, unknown>[]).map((row) => {
+          const parsed = Object.fromEntries(Object.entries(row).map(([key, value]) => [
+            key,
+            typeof value === 'string' && /^\d+$/.test(value) && !key.endsWith('_id') ? Number(value) : value,
+          ])) as MonitorRow;
+          return {
+            ...parsed,
+            grade_level: String(parsed.grade_level ?? 'Unassigned'),
+            section_name: String(parsed.section_name ?? 'Unnamed section'),
+          };
+        });
+        normalized.sort((a, b) => a.grade_level.localeCompare(b.grade_level, undefined, { numeric: true }) || a.section_name.localeCompare(b.section_name));
+        if (active) setRows(normalized);
+      } catch (error) {
+        if (active) {
+          setRows([]);
+          showToast(error instanceof Error ? error.message : 'Learner assessments could not be loaded.', 'error');
+        }
+      } finally {
+        if (active) setLoading(false);
+      }
+    })();
+
+    return () => { active = false; };
+  }, [showToast]);
 
   const visible = useMemo(() => {
     const term = search.trim().toLowerCase();

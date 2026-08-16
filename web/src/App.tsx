@@ -1,62 +1,64 @@
-import { Suspense, lazy, useEffect, useState } from 'react';
+import { Suspense, useEffect, useState } from 'react';
 import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 import { AcademicYearProvider } from './contexts/AcademicYearContext';
 import ProtectedRoute from './components/ProtectedRoute';
 import DashboardLayout from './components/DashboardLayout';
 import ClientErrorReporter from './components/ClientErrorReporter';
+import RouteErrorBoundary from './components/RouteErrorBoundary';
+import { lazyWithRetry } from './lib/lazyWithRetry';
 
-const LoginPage = lazy(() => import('./pages/auth/LoginPage'));
-const ResetPasswordPage = lazy(() => import('./pages/auth/ResetPasswordPage'));
-const MfaChallengePage = lazy(() => import('./pages/auth/MfaChallengePage'));
-const LandingPage = lazy(() => import('./pages/LandingPage'));
-const SettingsPage = lazy(() => import('./pages/SettingsPage'));
+const LoginPage = lazyWithRetry(() => import('./pages/auth/LoginPage'));
+const ResetPasswordPage = lazyWithRetry(() => import('./pages/auth/ResetPasswordPage'));
+const MfaChallengePage = lazyWithRetry(() => import('./pages/auth/MfaChallengePage'));
+const LandingPage = lazyWithRetry(() => import('./pages/LandingPage'));
+const SettingsPage = lazyWithRetry(() => import('./pages/SettingsPage'));
 
 // Public legal pages (required URLs for Google Play)
-const PrivacyPolicyPage = lazy(() => import('./pages/legal/PrivacyPolicyPage'));
-const TermsPage = lazy(() => import('./pages/legal/TermsPage'));
-const DeleteAccountPage = lazy(() => import('./pages/legal/DeleteAccountPage'));
+const PrivacyPolicyPage = lazyWithRetry(() => import('./pages/legal/PrivacyPolicyPage'));
+const TermsPage = lazyWithRetry(() => import('./pages/legal/TermsPage'));
+const DeleteAccountPage = lazyWithRetry(() => import('./pages/legal/DeleteAccountPage'));
 
 // Super Admin
-const SuperAdminDashboard = lazy(() => import('./pages/super-admin/Dashboard'));
-const SchoolsPage = lazy(() => import('./pages/super-admin/SchoolsPage'));
-const SchoolAdminsPage = lazy(() => import('./pages/super-admin/SchoolAdminsPage'));
-const SupportInboxPage = lazy(() => import('./pages/super-admin/SupportInboxPage'));
-const StaffPage = lazy(() => import('./pages/super-admin/StaffPage'));
-const AuditLogPage = lazy(() => import('./pages/super-admin/AuditLogPage'));
-const PlatformOperationsPage = lazy(() => import('./pages/super-admin/PlatformOperationsPage'));
-const ParentRevenuePage = lazy(() => import('./pages/super-admin/ParentRevenuePage'));
-const SecurityReliabilityPage = lazy(() => import('./pages/super-admin/SecurityReliabilityPage'));
-const LearnerAssessmentMonitorPage = lazy(() => import('./pages/super-admin/LearnerAssessmentMonitorPage'));
+const SuperAdminDashboard = lazyWithRetry(() => import('./pages/super-admin/Dashboard'));
+const SchoolsPage = lazyWithRetry(() => import('./pages/super-admin/SchoolsPage'));
+const SchoolAdminsPage = lazyWithRetry(() => import('./pages/super-admin/SchoolAdminsPage'));
+const SupportInboxPage = lazyWithRetry(() => import('./pages/super-admin/SupportInboxPage'));
+const StaffPage = lazyWithRetry(() => import('./pages/super-admin/StaffPage'));
+const AuditLogPage = lazyWithRetry(() => import('./pages/super-admin/AuditLogPage'));
+const PlatformOperationsPage = lazyWithRetry(() => import('./pages/super-admin/PlatformOperationsPage'));
+const ParentRevenuePage = lazyWithRetry(() => import('./pages/super-admin/ParentRevenuePage'));
+const SecurityReliabilityPage = lazyWithRetry(() => import('./pages/super-admin/SecurityReliabilityPage'));
+const LearnerAssessmentMonitorPage = lazyWithRetry(() => import('./pages/super-admin/LearnerAssessmentMonitorPage'));
 
 // School Admin
-const AdminDashboard = lazy(() => import('./pages/admin/Dashboard'));
-const InstructorsPage = lazy(() => import('./pages/admin/InstructorsPage'));
-const SectionsPage = lazy(() => import('./pages/admin/SectionsPage'));
-const SubjectsPage = lazy(() => import('./pages/admin/SubjectsPage'));
-const StudentsPage = lazy(() => import('./pages/admin/StudentsPage'));
-const SchedulesPage = lazy(() => import('./pages/admin/SchedulesPage'));
-const StrandsPage = lazy(() => import('./pages/admin/StrandsPage'));
-const AttendanceReportsPage = lazy(() => import('./pages/admin/AttendanceReportsPage'));
-const GradesOverviewPage = lazy(() => import('./pages/admin/GradesOverviewPage'));
-const ExamScoresOverviewPage = lazy(() => import('./pages/admin/ExamScoresOverviewPage'));
-const StudentAnalyticsPage = lazy(() => import('./pages/admin/StudentAnalyticsPage'));
-const SchoolAnalyticsDashboard = lazy(() => import('./pages/admin/SchoolAnalyticsDashboard'));
-const AcademicYearsPage = lazy(() => import('./pages/admin/AcademicYearsPage'));
-const YearEndWorkflowPage = lazy(() => import('./pages/admin/YearEndWorkflowPage'));
-const AdminSupportPage = lazy(() => import('./pages/admin/SupportPage'));
-const ParentCollectionsPage = lazy(() => import('./pages/admin/ParentCollectionsPage'));
-const AdminLearnerAssessmentMonitorPage = lazy(() => import('./pages/admin/LearnerAssessmentMonitorPage'));
+const AdminDashboard = lazyWithRetry(() => import('./pages/admin/Dashboard'));
+const InstructorsPage = lazyWithRetry(() => import('./pages/admin/InstructorsPage'));
+const SectionsPage = lazyWithRetry(() => import('./pages/admin/SectionsPage'));
+const SubjectsPage = lazyWithRetry(() => import('./pages/admin/SubjectsPage'));
+const StudentsPage = lazyWithRetry(() => import('./pages/admin/StudentsPage'));
+const SchedulesPage = lazyWithRetry(() => import('./pages/admin/SchedulesPage'));
+const StrandsPage = lazyWithRetry(() => import('./pages/admin/StrandsPage'));
+const AttendanceReportsPage = lazyWithRetry(() => import('./pages/admin/AttendanceReportsPage'));
+const GradesOverviewPage = lazyWithRetry(() => import('./pages/admin/GradesOverviewPage'));
+const ExamScoresOverviewPage = lazyWithRetry(() => import('./pages/admin/ExamScoresOverviewPage'));
+const StudentAnalyticsPage = lazyWithRetry(() => import('./pages/admin/StudentAnalyticsPage'));
+const SchoolAnalyticsDashboard = lazyWithRetry(() => import('./pages/admin/SchoolAnalyticsDashboard'));
+const AcademicYearsPage = lazyWithRetry(() => import('./pages/admin/AcademicYearsPage'));
+const YearEndWorkflowPage = lazyWithRetry(() => import('./pages/admin/YearEndWorkflowPage'));
+const AdminSupportPage = lazyWithRetry(() => import('./pages/admin/SupportPage'));
+const ParentCollectionsPage = lazyWithRetry(() => import('./pages/admin/ParentCollectionsPage'));
+const AdminLearnerAssessmentMonitorPage = lazyWithRetry(() => import('./pages/admin/LearnerAssessmentMonitorPage'));
 
 // Instructor
-const MySchedulePage = lazy(() => import('./pages/instructor/MySchedulePage'));
-const TakeAttendancePage = lazy(() => import('./pages/instructor/TakeAttendancePage'));
-const AttendanceHistoryPage = lazy(() => import('./pages/instructor/AttendanceHistoryPage'));
-const GradesPage = lazy(() => import('./pages/instructor/GradesPage'));
-const ExamScoresPage = lazy(() => import('./pages/instructor/ExamScoresPage'));
-const InstructorStudentAnalyticsPage = lazy(() => import('./pages/instructor/StudentAnalyticsPage'));
-const MyStudentsPage = lazy(() => import('./pages/instructor/MyStudentsPage'));
-const LearnerAssessmentsPage = lazy(() => import('./pages/instructor/LearnerAssessmentsPage'));
+const MySchedulePage = lazyWithRetry(() => import('./pages/instructor/MySchedulePage'));
+const TakeAttendancePage = lazyWithRetry(() => import('./pages/instructor/TakeAttendancePage'));
+const AttendanceHistoryPage = lazyWithRetry(() => import('./pages/instructor/AttendanceHistoryPage'));
+const GradesPage = lazyWithRetry(() => import('./pages/instructor/GradesPage'));
+const ExamScoresPage = lazyWithRetry(() => import('./pages/instructor/ExamScoresPage'));
+const InstructorStudentAnalyticsPage = lazyWithRetry(() => import('./pages/instructor/StudentAnalyticsPage'));
+const MyStudentsPage = lazyWithRetry(() => import('./pages/instructor/MyStudentsPage'));
+const LearnerAssessmentsPage = lazyWithRetry(() => import('./pages/instructor/LearnerAssessmentsPage'));
 
 const instructorPages = {
   schedule: MySchedulePage,
@@ -311,7 +313,9 @@ export default function App() {
       <AuthProvider>
         <ClientErrorReporter />
         <AcademicYearProvider>
-          <AppRoutes />
+          <RouteErrorBoundary>
+            <AppRoutes />
+          </RouteErrorBoundary>
         </AcademicYearProvider>
       </AuthProvider>
     </BrowserRouter>
