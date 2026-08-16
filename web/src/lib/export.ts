@@ -90,7 +90,7 @@ export function downloadCsv<T>(fileName: string, rows: T[], columns: ExportColum
 
 export async function downloadExcel<T>(fileName: string, sheetName: string, rows: T[], columns: ExportColumn<T>[], options: ExportOptions = {}) {
   if (!assertExportsEnabled()) return;
-  const XLSX = await import('xlsx');
+  const XLSX = await import('xlsx-js-style');
   const { matrix, headerRowIndex } = buildExportMatrix(fileName, rows, columns, options);
   const worksheet = XLSX.utils.aoa_to_sheet(matrix);
   const workbook = XLSX.utils.book_new();

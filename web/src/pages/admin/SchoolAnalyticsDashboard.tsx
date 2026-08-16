@@ -17,6 +17,7 @@ import {
   Sparkles,
 } from 'lucide-react';
 import { downloadCsv, downloadExcel, type ExportColumn } from '../../lib/export';
+import { downloadDashboardWorkbook, type DashboardMetric } from '../../lib/dashboardExport';
 import { computeRiskScore } from '../../lib/riskScore';
 import { mapEnrollmentRoster } from '../../lib/academicYearRoster';
 
@@ -897,6 +898,70 @@ export default function SchoolAnalyticsDashboard() {
     { header: 'Status', value: r => r.status === 'critical' ? 'CRITICAL' : 'AT-RISK' },
   ];
 
+  async function downloadDesignedAnalyticsReport() {
+    const attendanceTone: DashboardMetric['tone'] = kpis.rate >= 95 ? 'green' : kpis.rate >= 80 ? 'amber' : 'red';
+    const metrics: DashboardMetric[] = [
+      { label: 'Attendance Rate', value: `${kpis.rate}%`, tone: attendanceTone, progress: kpis.rate },
+      { label: 'Present Records', value: kpis.present.toLocaleString(), tone: 'green', progress: kpis.total ? kpis.present / kpis.total * 100 : 0 },
+      { label: 'Absent Records', value: kpis.absent.toLocaleString(), tone: kpis.absent ? 'red' : 'green', progress: kpis.total ? kpis.absent / kpis.total * 100 : 0 },
+      { label: 'Previous Period', value: `${periodComparison.previousRate}%`, tone: 'slate', progress: periodComparison.previousRate },
+      { label: 'Rate Change', value: `${periodComparison.rateChange > 0 ? '+' : ''}${periodComparison.rateChange.toFixed(1)} pp`, tone: periodComparison.rateChange >= 0 ? 'green' : 'red' },
+      { label: 'Total Attendance Records', value: kpis.total.toLocaleString(), tone: 'blue' },
+      { label: 'Late Records', value: kpis.late.toLocaleString(), tone: kpis.late ? 'amber' : 'green' },
+      { label: 'Excused Records', value: kpis.excused.toLocaleString(), tone: 'blue' },
+      { label: 'Perfect Attendance', value: chronicStats.perfect.toLocaleString(), tone: 'green' },
+      { label: 'Chronic Absentees', value: chronicStats.chronic.toLocaleString(), tone: chronicStats.chronic ? 'red' : 'green' },
+      { label: 'At-Risk Students', value: atRiskStudents.length.toLocaleString(), tone: atRiskStudents.length ? 'amber' : 'green' },
+      { label: 'Average GPA', value: gradeStats.averageGpa.toFixed(1), tone: gradeStats.averageGpa >= 90 ? 'green' : gradeStats.averageGpa >= 75 ? 'amber' : 'red', progress: gradeStats.averageGpa },
+      { label: 'Median GPA', value: gradeStats.medianGpa.toFixed(1), tone: 'blue', progress: gradeStats.medianGpa },
+      { label: 'Failing Students', value: gradeStats.failingCount.toLocaleString(), tone: gradeStats.failingCount ? 'red' : 'green' },
+    ];
+    const selectedSection = sections.find(section => section.id === sectionFilter);
+    await downloadDashboardWorkbook('classpulse-school-analytics', {
+      title: 'ClassPulse School Analytics Report',
+      subtitle: `${activeYear?.name ?? 'Selected academic year'} · ${range}-day performance overview`,
+      generatedBy: user?.full_name,
+      metadata: [
+        { label: 'Report period', value: `${dateFrom} to ${dateTo}` },
+        { label: 'Grade filter', value: gradeLevelFilter === 'all' ? 'All grade levels' : gradeLevelFilter },
+        { label: 'Section filter', value: selectedSection ? `${selectedSection.grade_level} - ${selectedSection.name}` : 'All sections' },
+        { label: 'Students included', value: filteredStudents.length },
+      ],
+      metrics,
+      insights: insights.map(insight => ({ type: insight.type, message: insight.msg })),
+      sheets: [
+        {
+          name: 'Attendance Trend',
+          title: 'Daily Attendance Trend',
+          headers: ['Date', 'Present', 'Absent', 'Late', 'Excused', 'Total Records', 'Attendance Rate'],
+          rows: dailyTrend.map(day => [day.date, day.present, day.absent, day.late, day.excused, day.total, day.rate]),
+          widths: [16, 13, 13, 12, 13, 16, 19],
+        },
+        {
+          name: 'Sections',
+          title: 'Section Performance',
+          headers: ['Section', 'Grade Level', 'Students', 'Present', 'Absent', 'Late', 'Total Records', 'Attendance Rate'],
+          rows: sectionRates.map(section => [section.name, section.grade_level, section.students, section.present, section.absent, section.late, section.total, section.rate]),
+          widths: [24, 17, 13, 13, 13, 12, 16, 19],
+        },
+        ...(subjectPerformance.length ? [{
+          name: 'Subjects',
+          title: 'Subject Performance',
+          headers: ['Subject', 'Code', 'Average Grade', 'Pass Rate', 'Grades Recorded', 'Students Graded'],
+          rows: subjectPerformance.map(subject => [subject.name, subject.code, subject.averageGrade, subject.passRate, subject.totalGrades, subject.studentCount]),
+          widths: [30, 16, 18, 16, 18, 18],
+        }] : []),
+        ...(atRiskStudents.length ? [{
+          name: 'At-Risk Students',
+          title: 'Students Requiring Attention',
+          headers: ['Student', 'LRN', 'Section', 'Absences', 'Lates', 'Consecutive Absences', 'Total Records', 'Absence Rate', 'Risk Score', 'Status'],
+          rows: atRiskStudents.map(student => [student.name, student.lrn, student.section, student.absences, student.lates, student.maxConsecutive, student.total, student.rate, student.risk_score, student.status === 'critical' ? 'CRITICAL' : 'AT-RISK']),
+          widths: [30, 16, 24, 14, 12, 22, 16, 17, 14, 14],
+        }] : []),
+      ],
+    });
+  }
+
   /* ─── Filtered at-risk students (for search) ─── */
   const visibleAtRisk = useMemo(() => {
     const q = riskSearch.trim().toLowerCase();
@@ -1258,7 +1323,7 @@ export default function SchoolAnalyticsDashboard() {
           {/* Export card */}
           <SectionCard
             title="Export Data"
-            subtitle="Download dashboard data as CSV or Excel"
+            subtitle="Download a presentation-ready Excel workbook or raw CSV data"
             icon={<Download size={18} className="text-emerald-500" />}
           >
             <div className="flex flex-wrap gap-2">
@@ -1266,13 +1331,13 @@ export default function SchoolAnalyticsDashboard() {
                 onClick={() => downloadCsv('analytics_summary', summaryData, summaryColumns)}
                 className="bg-emerald-600 hover:bg-emerald-700 text-white px-3 py-2 rounded-lg text-sm font-medium flex items-center gap-1.5 transition-colors cursor-pointer"
               >
-                <Download size={14} /> Summary CSV
+                <Download size={14} /> Raw Summary CSV
               </button>
               <button
-                onClick={() => downloadExcel('analytics_summary', 'Summary', summaryData, summaryColumns)}
+                onClick={() => void downloadDesignedAnalyticsReport()}
                 className="bg-sky-600 hover:bg-sky-700 text-white px-3 py-2 rounded-lg text-sm font-medium flex items-center gap-1.5 transition-colors cursor-pointer"
               >
-                <FileSpreadsheet size={14} /> Summary Excel
+                <FileSpreadsheet size={14} /> Designed Excel Report
               </button>
               <button
                 onClick={() => downloadCsv('section_rates', sectionRates, sectionRatesColumns)}
