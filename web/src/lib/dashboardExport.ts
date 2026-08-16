@@ -1,45 +1,20 @@
 import { isRuntimeFeatureEnabled } from './runtimeEntitlements';
 
 export type DashboardTone = 'teal' | 'green' | 'blue' | 'amber' | 'red' | 'slate';
-
-export interface DashboardMetric {
-  label: string;
-  value: string | number;
-  tone?: DashboardTone;
-  progress?: number;
-}
-
-export interface DashboardInsight {
-  type: 'critical' | 'warning' | 'info' | 'success';
-  message: string;
-}
-
-export interface DashboardTableSheet {
-  name: string;
-  title: string;
-  subtitle?: string;
-  headers: string[];
-  rows: (string | number | boolean)[][];
-  widths?: number[];
-}
-
+export interface DashboardMetric { label: string; value: string | number; tone?: DashboardTone; progress?: number; }
+export interface DashboardInsight { type: 'critical' | 'warning' | 'info' | 'success'; message: string; }
+export interface DashboardChart { type: 'line' | 'bar' | 'donut'; title: string; labels: string[]; values: number[]; suffix?: string; colors?: string[]; }
+export interface DashboardTableSheet { name: string; title: string; subtitle?: string; headers: string[]; rows: (string | number | boolean)[][]; widths?: number[]; }
 export interface DashboardWorkbookOptions {
-  title: string;
-  subtitle: string;
-  generatedBy?: string;
+  title: string; subtitle: string; generatedBy?: string;
   metadata?: { label: string; value: string | number }[];
-  metrics: DashboardMetric[];
-  insights?: DashboardInsight[];
-  sheets: DashboardTableSheet[];
+  metrics: DashboardMetric[]; insights?: DashboardInsight[]; charts?: DashboardChart[]; sheets: DashboardTableSheet[];
 }
 
 const tones: Record<DashboardTone, { dark: string; light: string }> = {
-  teal: { dark: '0F766E', light: 'CCFBF1' },
-  green: { dark: '15803D', light: 'DCFCE7' },
-  blue: { dark: '0369A1', light: 'E0F2FE' },
-  amber: { dark: 'B45309', light: 'FEF3C7' },
-  red: { dark: 'BE123C', light: 'FFE4E6' },
-  slate: { dark: '475569', light: 'F1F5F9' },
+  teal: { dark: '0F766E', light: 'CCFBF1' }, green: { dark: '15803D', light: 'DCFCE7' },
+  blue: { dark: '0369A1', light: 'E0F2FE' }, amber: { dark: 'B45309', light: 'FEF3C7' },
+  red: { dark: 'BE123C', light: 'FFE4E6' }, slate: { dark: '475569', light: 'F1F5F9' },
 };
 
 function safeFileName(value: string) {
@@ -48,137 +23,131 @@ function safeFileName(value: string) {
 }
 
 function generatedLabel() {
-  return new Intl.DateTimeFormat('en-PH', {
-    year: 'numeric', month: 'long', day: 'numeric', hour: 'numeric', minute: '2-digit',
-    timeZone: 'Asia/Manila', timeZoneName: 'short',
-  }).format(new Date());
+  return new Intl.DateTimeFormat('en-PH', { year: 'numeric', month: 'long', day: 'numeric', hour: 'numeric', minute: '2-digit', timeZone: 'Asia/Manila', timeZoneName: 'short' }).format(new Date());
 }
 
-function progressBar(progress?: number) {
-  if (progress === undefined) return '';
-  const bounded = Math.max(0, Math.min(100, progress));
-  const filled = Math.round(bounded / 10);
-  return `${'█'.repeat(filled)}${'░'.repeat(10 - filled)} ${bounded.toFixed(0)}%`;
+function chartCanvas(chart: DashboardChart) {
+  const canvas = document.createElement('canvas');
+  canvas.width = 1200; canvas.height = 520;
+  const context = canvas.getContext('2d');
+  if (!context) throw new Error('Your browser could not create the report charts.');
+  context.fillStyle = '#ffffff'; context.fillRect(0, 0, canvas.width, canvas.height);
+  context.strokeStyle = '#dbe5ec'; context.lineWidth = 2; context.strokeRect(1, 1, canvas.width - 2, canvas.height - 2);
+  context.fillStyle = '#0f172a'; context.font = '700 30px Arial'; context.fillText(chart.title, 42, 52);
+  if (!chart.values.length) {
+    context.fillStyle = '#94a3b8'; context.font = '20px Arial'; context.fillText('No data available for the selected period.', 42, 105);
+  } else if (chart.type === 'donut') drawDonut(context, chart);
+  else drawCartesian(context, chart);
+  return canvas.toDataURL('image/png');
+}
+
+function drawCartesian(context: CanvasRenderingContext2D, chart: DashboardChart) {
+  const left = 75, right = 35, top = 90, bottom = 75;
+  const plotWidth = 1200 - left - right, plotHeight = 520 - top - bottom;
+  const maxValue = Math.max(1, ...chart.values) * 1.12;
+  context.font = '16px Arial'; context.textAlign = 'right';
+  for (let step = 0; step <= 4; step += 1) {
+    const value = maxValue * (4 - step) / 4, y = top + plotHeight * step / 4;
+    context.strokeStyle = '#e2e8f0'; context.lineWidth = 1; context.beginPath(); context.moveTo(left, y); context.lineTo(1200 - right, y); context.stroke();
+    context.fillStyle = '#64748b'; context.fillText(`${value.toFixed(value < 10 ? 1 : 0)}${chart.suffix ?? ''}`, left - 10, y + 5);
+  }
+  const primary = chart.colors?.[0] ?? '#0f766e', count = chart.values.length;
+  if (chart.type === 'bar') {
+    const gap = Math.max(8, plotWidth / count * 0.18), barWidth = Math.max(12, (plotWidth - gap * (count + 1)) / count);
+    chart.values.forEach((value, index) => {
+      const x = left + gap + index * (barWidth + gap), barHeight = value / maxValue * plotHeight;
+      context.fillStyle = chart.colors?.[index % (chart.colors?.length ?? 1)] ?? primary; context.fillRect(x, top + plotHeight - barHeight, barWidth, barHeight);
+      context.fillStyle = '#334155'; context.textAlign = 'center'; context.font = '600 14px Arial'; context.fillText(`${value.toFixed(1)}${chart.suffix ?? ''}`, x + barWidth / 2, top + plotHeight - barHeight - 8);
+    });
+  } else {
+    const stepX = count > 1 ? plotWidth / (count - 1) : plotWidth;
+    context.beginPath(); chart.values.forEach((value, index) => { const x = left + index * stepX, y = top + plotHeight - value / maxValue * plotHeight; if (index) context.lineTo(x, y); else context.moveTo(x, y); });
+    context.strokeStyle = primary; context.lineWidth = 5; context.stroke();
+    chart.values.forEach((value, index) => { const x = left + index * stepX, y = top + plotHeight - value / maxValue * plotHeight; context.beginPath(); context.arc(x, y, 6, 0, Math.PI * 2); context.fillStyle = '#fff'; context.fill(); context.strokeStyle = primary; context.lineWidth = 4; context.stroke(); });
+  }
+  const every = Math.max(1, Math.ceil(count / 8)); context.textAlign = 'center'; context.font = '14px Arial'; context.fillStyle = '#64748b';
+  chart.labels.forEach((label, index) => {
+    if (index % every && index !== chart.labels.length - 1) return;
+    const x = chart.type === 'bar' ? left + plotWidth / count * (index + 0.5) : left + (count > 1 ? plotWidth / (count - 1) * index : plotWidth / 2);
+    context.fillText(label.length > 13 ? `${label.slice(0, 11)}…` : label, x, 485);
+  });
+}
+
+function drawDonut(context: CanvasRenderingContext2D, chart: DashboardChart) {
+  const colors = chart.colors ?? ['#10b981', '#f43f5e', '#f59e0b', '#3b82f6'];
+  const total = chart.values.reduce((sum, value) => sum + Math.max(0, value), 0);
+  const centerX = 310, centerY = 290, radius = 155, innerRadius = 92;
+  let angle = -Math.PI / 2;
+  chart.values.forEach((value, index) => {
+    const portion = total ? Math.max(0, value) / total * Math.PI * 2 : 0;
+    context.beginPath(); context.arc(centerX, centerY, radius, angle, angle + portion); context.arc(centerX, centerY, innerRadius, angle + portion, angle, true); context.closePath();
+    context.fillStyle = colors[index % colors.length]; context.fill(); angle += portion;
+  });
+  context.fillStyle = '#0f172a'; context.textAlign = 'center'; context.font = '700 38px Arial'; context.fillText(total.toLocaleString(), centerX, centerY + 5);
+  context.fillStyle = '#64748b'; context.font = '16px Arial'; context.fillText('total records', centerX, centerY + 34); context.textAlign = 'left';
+  chart.labels.forEach((label, index) => {
+    const y = 155 + index * 70, value = chart.values[index] ?? 0, percent = total ? value / total * 100 : 0;
+    context.fillStyle = colors[index % colors.length]; context.fillRect(610, y - 18, 28, 28);
+    context.fillStyle = '#334155'; context.font = '600 20px Arial'; context.fillText(`${label}: ${value.toLocaleString()} (${percent.toFixed(1)}%)`, 655, y + 4);
+  });
+}
+
+function triggerDownload(buffer: ArrayBuffer, fileName: string) {
+  const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+  const url = URL.createObjectURL(blob), anchor = document.createElement('a');
+  anchor.href = url; anchor.download = safeFileName(fileName); document.body.appendChild(anchor); anchor.click(); document.body.removeChild(anchor); URL.revokeObjectURL(url);
 }
 
 export async function downloadDashboardWorkbook(fileName: string, options: DashboardWorkbookOptions) {
-  if (!isRuntimeFeatureEnabled('exports_download')) {
-    alert('Exports are currently unavailable.');
-    return;
-  }
-
-  const XLSX = await import('xlsx-js-style');
-  const workbook = XLSX.utils.book_new();
-  const overviewRows: (string | number)[][] = [
-    [options.title],
-    [options.subtitle],
-    ['Generated', generatedLabel()],
-    ...(options.generatedBy ? [['Prepared by', options.generatedBy]] : []),
-    ...(options.metadata ?? []).map((item) => [item.label, item.value]),
-    [],
-  ];
-  const metricStart = overviewRows.length;
-  const cardStarts = [0, 3, 6];
-
-  for (let index = 0; index < options.metrics.length; index += 3) {
-    const group = options.metrics.slice(index, index + 3);
-    const labelRow = Array(8).fill('') as (string | number)[];
-    const valueRow = Array(8).fill('') as (string | number)[];
-    const barRow = Array(8).fill('') as (string | number)[];
-    group.forEach((metric, groupIndex) => {
-      const column = cardStarts[groupIndex];
-      labelRow[column] = metric.label;
-      valueRow[column] = metric.value;
-      barRow[column] = progressBar(metric.progress);
-    });
-    overviewRows.push(labelRow, valueRow, barRow);
-  }
-
-  overviewRows.push([], ['KEY INSIGHTS']);
-  const insightStart = overviewRows.length;
-  for (const insight of options.insights ?? []) overviewRows.push([insight.message]);
-  if (!options.insights?.length) overviewRows.push(['No urgent issues were detected for the selected period.']);
-
-  const overview = XLSX.utils.aoa_to_sheet(overviewRows);
-  overview['!cols'] = [{ wch: 22 }, { wch: 16 }, { wch: 3 }, { wch: 22 }, { wch: 16 }, { wch: 3 }, { wch: 22 }, { wch: 16 }];
-  overview['!rows'] = overviewRows.map((_, row) => ({ hpt: row === 0 ? 31 : row >= metricStart && row < insightStart - 2 ? 22 : 19 }));
-  overview['!merges'] = [
-    { s: { r: 0, c: 0 }, e: { r: 0, c: 7 } },
-    { s: { r: 1, c: 0 }, e: { r: 1, c: 7 } },
-    { s: { r: insightStart - 1, c: 0 }, e: { r: insightStart - 1, c: 7 } },
-  ];
-  if (overview.A1) overview.A1.s = { font: { bold: true, sz: 20, color: { rgb: 'FFFFFF' } }, fill: { fgColor: { rgb: '075F68' } }, alignment: { vertical: 'center' } };
-  if (overview.A2) overview.A2.s = { font: { italic: true, sz: 11, color: { rgb: '475569' } }, fill: { fgColor: { rgb: 'ECFEFF' } } };
-
-  for (let index = 0; index < options.metrics.length; index += 1) {
-    const groupRow = Math.floor(index / 3);
-    const groupColumn = index % 3;
-    const row = metricStart + groupRow * 3;
-    const column = cardStarts[groupColumn];
-    const metric = options.metrics[index];
-    const tone = tones[metric.tone ?? 'teal'];
-    overview['!merges']!.push(
-      { s: { r: row, c: column }, e: { r: row, c: column + 1 } },
-      { s: { r: row + 1, c: column }, e: { r: row + 1, c: column + 1 } },
-      { s: { r: row + 2, c: column }, e: { r: row + 2, c: column + 1 } },
-    );
-    const labelCell = overview[XLSX.utils.encode_cell({ r: row, c: column })];
-    const valueCell = overview[XLSX.utils.encode_cell({ r: row + 1, c: column })];
-    const barCell = overview[XLSX.utils.encode_cell({ r: row + 2, c: column })];
-    const fill = { fgColor: { rgb: tone.light } };
-    if (labelCell) labelCell.s = { fill, font: { bold: true, sz: 10, color: { rgb: tone.dark } }, alignment: { vertical: 'center' }, border: { top: { style: 'thin', color: { rgb: tone.dark } }, left: { style: 'thin', color: { rgb: tone.dark } }, right: { style: 'thin', color: { rgb: tone.dark } } } };
-    if (valueCell) valueCell.s = { fill, font: { bold: true, sz: 18, color: { rgb: '0F172A' } }, alignment: { vertical: 'center' }, border: { left: { style: 'thin', color: { rgb: tone.dark } }, right: { style: 'thin', color: { rgb: tone.dark } } } };
-    if (barCell) barCell.s = { fill, font: { bold: true, sz: 9, color: { rgb: tone.dark } }, border: { bottom: { style: 'thin', color: { rgb: tone.dark } }, left: { style: 'thin', color: { rgb: tone.dark } }, right: { style: 'thin', color: { rgb: tone.dark } } } };
-  }
-
-  const insightHeader = overview[XLSX.utils.encode_cell({ r: insightStart - 1, c: 0 })];
-  if (insightHeader) insightHeader.s = { fill: { fgColor: { rgb: '0F766E' } }, font: { bold: true, color: { rgb: 'FFFFFF' } } };
-  (options.insights?.length ? options.insights : [{ type: 'success' as const, message: '' }]).forEach((insight, index) => {
-    const row = insightStart + index;
-    overview['!merges']!.push({ s: { r: row, c: 0 }, e: { r: row, c: 7 } });
-    const cell = overview[XLSX.utils.encode_cell({ r: row, c: 0 })];
-    const tone = tones[insight.type === 'critical' ? 'red' : insight.type === 'warning' ? 'amber' : insight.type === 'info' ? 'blue' : 'green'];
-    if (cell) cell.s = { fill: { fgColor: { rgb: tone.light } }, font: { color: { rgb: tone.dark } }, alignment: { wrapText: true, vertical: 'center' } };
+  if (!isRuntimeFeatureEnabled('exports_download')) { alert('Exports are currently unavailable.'); return; }
+  const { Workbook } = await import('exceljs');
+  const workbook = new Workbook();
+  workbook.creator = 'ClassPulse'; workbook.title = options.title; workbook.subject = options.subtitle; workbook.created = new Date(); workbook.modified = new Date();
+  const overview = workbook.addWorksheet('Executive Overview', { views: [{ state: 'frozen', ySplit: 6 }], pageSetup: { orientation: 'landscape', fitToPage: true, fitToWidth: 1, fitToHeight: 0, margins: { left: 0.3, right: 0.3, top: 0.5, bottom: 0.5, header: 0.2, footer: 0.2 } } });
+  for (let column = 1; column <= 12; column += 1) overview.getColumn(column).width = 13;
+  overview.mergeCells('A1:L2');
+  const title = overview.getCell('A1'); title.value = options.title; title.font = { bold: true, size: 22, color: { argb: 'FFFFFFFF' } }; title.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF075F68' } }; title.alignment = { vertical: 'middle' };
+  overview.getRow(1).height = 25; overview.getRow(2).height = 25; overview.mergeCells('A3:L3');
+  overview.getCell('A3').value = options.subtitle; overview.getCell('A3').font = { italic: true, size: 11, color: { argb: 'FF475569' } }; overview.getCell('A3').fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFECFEFF' } };
+  overview.getCell('A4').value = 'Generated'; overview.getCell('B4').value = generatedLabel(); overview.getCell('E4').value = 'Prepared by'; overview.getCell('F4').value = options.generatedBy ?? 'School Administrator';
+  (options.metadata ?? []).slice(0, 4).forEach((item, index) => { const column = index % 2 ? 7 : 1, row = 5 + Math.floor(index / 2); overview.getCell(row, column).value = item.label; overview.getCell(row, column + 1).value = item.value; overview.getCell(row, column).font = { bold: true, color: { argb: 'FF475569' } }; });
+  const metricStart = 8;
+  options.metrics.forEach((metric, index) => {
+    const column = index % 4 * 3 + 1, row = metricStart + Math.floor(index / 4) * 3, tone = tones[metric.tone ?? 'teal'];
+    overview.mergeCells(row, column, row, column + 2); overview.mergeCells(row + 1, column, row + 2, column + 2);
+    const label = overview.getCell(row, column); label.value = metric.label.toUpperCase(); label.font = { bold: true, size: 10, color: { argb: `FF${tone.dark}` } }; label.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: `FF${tone.light}` } }; label.alignment = { vertical: 'middle' };
+    const bounded = Math.max(0, Math.min(100, metric.progress ?? 0)), dots = Math.round(bounded / 10);
+    const value = overview.getCell(row + 1, column); value.value = metric.progress === undefined ? String(metric.value) : `${metric.value}\n${'●'.repeat(dots)}${'○'.repeat(10 - dots)}`; value.font = { bold: true, size: 17, color: { argb: 'FF0F172A' } }; value.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: `FF${tone.light}` } }; value.alignment = { vertical: 'middle', wrapText: true };
+    for (let r = row; r <= row + 2; r += 1) for (let c = column; c <= column + 2; c += 1) overview.getCell(r, c).border = { top: { style: 'thin', color: { argb: `FF${tone.dark}` } }, bottom: { style: 'thin', color: { argb: `FF${tone.dark}` } }, left: { style: 'thin', color: { argb: `FF${tone.dark}` } }, right: { style: 'thin', color: { argb: `FF${tone.dark}` } } };
+    overview.getRow(row).height = 20; overview.getRow(row + 1).height = 28; overview.getRow(row + 2).height = 22;
   });
-  XLSX.utils.book_append_sheet(workbook, overview, 'Overview');
-
-  for (const table of options.sheets) {
-    const rows = [[table.title], [table.subtitle ?? options.subtitle], ['Generated', generatedLabel()], [], table.headers, ...table.rows];
-    const worksheet = XLSX.utils.aoa_to_sheet(rows);
-    const lastColumn = Math.max(0, table.headers.length - 1);
-    const lastRow = Math.max(4, rows.length - 1);
-    worksheet['!merges'] = [
-      { s: { r: 0, c: 0 }, e: { r: 0, c: lastColumn } },
-      { s: { r: 1, c: 0 }, e: { r: 1, c: lastColumn } },
-    ];
-    worksheet['!cols'] = table.headers.map((header, index) => ({ wch: table.widths?.[index] ?? Math.min(34, Math.max(13, header.length + 3)) }));
-    worksheet['!rows'] = rows.map((_, row) => ({ hpt: row === 0 ? 28 : row === 4 ? 24 : 19 }));
-    worksheet['!autofilter'] = { ref: XLSX.utils.encode_range({ r: 4, c: 0 }, { r: lastRow, c: lastColumn }) };
-    if (worksheet.A1) worksheet.A1.s = { fill: { fgColor: { rgb: '075F68' } }, font: { bold: true, sz: 18, color: { rgb: 'FFFFFF' } } };
-    if (worksheet.A2) worksheet.A2.s = { fill: { fgColor: { rgb: 'ECFEFF' } }, font: { italic: true, color: { rgb: '475569' } } };
-    for (let column = 0; column <= lastColumn; column += 1) {
-      const headerCell = worksheet[XLSX.utils.encode_cell({ r: 4, c: column })];
-      if (headerCell) headerCell.s = { fill: { fgColor: { rgb: '0F766E' } }, font: { bold: true, color: { rgb: 'FFFFFF' } }, alignment: { wrapText: true, vertical: 'center' } };
-      for (let row = 5; row <= lastRow; row += 1) {
-        const cell = worksheet[XLSX.utils.encode_cell({ r: row, c: column })];
-        if (!cell) continue;
-        const header = table.headers[column].toLowerCase();
-        const value = cell.v;
-        let fill = row % 2 ? 'FFFFFF' : 'F8FAFC';
-        let color = '334155';
-        if (typeof value === 'number' && (header.includes('rate') || header.includes('gpa') || header.includes('grade'))) {
-          if (value >= 90) { fill = tones.green.light; color = tones.green.dark; }
-          else if (value >= 75) { fill = tones.amber.light; color = tones.amber.dark; }
-          else { fill = tones.red.light; color = tones.red.dark; }
-        }
-        if (typeof value === 'string' && value.toUpperCase() === 'CRITICAL') { fill = tones.red.light; color = tones.red.dark; }
-        if (typeof value === 'string' && value.toUpperCase() === 'AT-RISK') { fill = tones.amber.light; color = tones.amber.dark; }
-        cell.s = { fill: { fgColor: { rgb: fill } }, font: { color: { rgb: color }, bold: header === 'status' }, alignment: { vertical: 'top', wrapText: true } };
-      }
-    }
-    const safeName = table.name.replace(/[\\/?*[\]:]/g, ' ').slice(0, 31) || 'Report';
-    XLSX.utils.book_append_sheet(workbook, worksheet, safeName);
-  }
-
-  XLSX.writeFile(workbook, safeFileName(fileName), { cellStyles: true });
+  const insightHeaderRow = metricStart + Math.ceil(options.metrics.length / 4) * 3 + 1;
+  overview.mergeCells(insightHeaderRow, 1, insightHeaderRow, 12); overview.getCell(insightHeaderRow, 1).value = 'KEY INSIGHTS AND RECOMMENDED ACTIONS'; overview.getCell(insightHeaderRow, 1).font = { bold: true, color: { argb: 'FFFFFFFF' } }; overview.getCell(insightHeaderRow, 1).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF0F766E' } };
+  const insights = options.insights?.length ? options.insights : [{ type: 'success' as const, message: 'No urgent issues were detected for the selected period.' }];
+  insights.slice(0, 6).forEach((insight, index) => {
+    const row = insightHeaderRow + index + 1, tone = tones[insight.type === 'critical' ? 'red' : insight.type === 'warning' ? 'amber' : insight.type === 'info' ? 'blue' : 'green'];
+    overview.mergeCells(row, 1, row, 12); const cell = overview.getCell(row, 1); cell.value = `• ${insight.message}`; cell.font = { color: { argb: `FF${tone.dark}` } }; cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: `FF${tone.light}` } }; cell.alignment = { wrapText: true, vertical: 'middle' }; overview.getRow(row).height = 27;
+  });
+  const chartStart = insightHeaderRow + Math.min(insights.length, 6) + 2;
+  (options.charts ?? []).slice(0, 4).forEach((chart, index) => {
+    const imageId = workbook.addImage({ base64: chartCanvas(chart), extension: 'png' }), rowOffset = Math.floor(index / 2) * 16;
+    const startColumn = index % 2 ? 'G' : 'A', endColumn = index % 2 ? 'L' : 'F';
+    overview.addImage(imageId, `${startColumn}${chartStart + rowOffset}:${endColumn}${chartStart + 14 + rowOffset}`);
+  });
+  overview.pageSetup.printArea = `A1:L${chartStart + Math.ceil(Math.min(options.charts?.length ?? 0, 4) / 2) * 16}`; overview.headerFooter.oddFooter = '&LClassPulse School Analytics&CPage &P of &N&RConfidential school record';
+  options.sheets.forEach((table, sheetIndex) => {
+    const sheet = workbook.addWorksheet(table.name.slice(0, 31), { views: [{ state: 'frozen', ySplit: 5 }], pageSetup: { orientation: table.headers.length > 6 ? 'landscape' : 'portrait', fitToPage: true, fitToWidth: 1, fitToHeight: 0 } });
+    table.headers.forEach((_, index) => { sheet.getColumn(index + 1).width = table.widths?.[index] ?? 18; });
+    sheet.mergeCells(1, 1, 2, Math.max(1, table.headers.length)); const sheetTitle = sheet.getCell(1, 1); sheetTitle.value = table.title; sheetTitle.font = { bold: true, size: 19, color: { argb: 'FFFFFFFF' } }; sheetTitle.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF075F68' } }; sheetTitle.alignment = { vertical: 'middle' };
+    sheet.mergeCells(3, 1, 3, Math.max(1, table.headers.length)); sheet.getCell(3, 1).value = table.subtitle ?? options.subtitle; sheet.getCell(3, 1).font = { italic: true, color: { argb: 'FF475569' } }; sheet.getCell(3, 1).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFECFEFF' } };
+    sheet.addTable({ name: `ClassPulseTable${sheetIndex + 1}`, ref: 'A5', headerRow: true, totalsRow: false, style: { theme: 'TableStyleMedium2', showRowStripes: true }, columns: table.headers.map(header => ({ name: header, filterButton: true })), rows: table.rows });
+    const header = sheet.getRow(5); header.height = 25; header.font = { bold: true, color: { argb: 'FFFFFFFF' } }; header.alignment = { vertical: 'middle', wrapText: true };
+    table.rows.forEach((values, rowIndex) => values.forEach((rawValue, columnIndex) => {
+      const label = table.headers[columnIndex].toLowerCase(), cell = sheet.getCell(rowIndex + 6, columnIndex + 1); cell.alignment = { vertical: 'top', wrapText: true };
+      if (typeof rawValue === 'number' && (label.includes('rate') || label.includes('gpa') || label.includes('grade'))) { const tone = rawValue >= 90 ? tones.green : rawValue >= 75 ? tones.amber : tones.red; cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: `FF${tone.light}` } }; cell.font = { bold: true, color: { argb: `FF${tone.dark}` } }; cell.numFmt = '0.0'; }
+      if (typeof rawValue === 'string' && ['CRITICAL', 'AT-RISK'].includes(rawValue.toUpperCase())) { const tone = rawValue.toUpperCase() === 'CRITICAL' ? tones.red : tones.amber; cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: `FF${tone.light}` } }; cell.font = { bold: true, color: { argb: `FF${tone.dark}` } }; }
+    }));
+    sheet.headerFooter.oddFooter = '&LClassPulse&CPage &P of &N&RConfidential school record';
+  });
+  const buffer = await workbook.xlsx.writeBuffer(); triggerDownload(buffer as ArrayBuffer, fileName);
 }

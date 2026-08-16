@@ -253,6 +253,7 @@ export default function SchoolAnalyticsDashboard() {
   const [gradeLevelFilter, setGradeLevelFilter] = useState('all');
   const [tab, setTab] = useState<Tab>('overview');
   const [riskSearch, setRiskSearch] = useState('');
+  const [exportingReport, setExportingReport] = useState(false);
 
   // Raw data
   const [records, setRecords] = useCachedState<AttendanceRecord[]>('admin-analytics', []);
@@ -899,6 +900,9 @@ export default function SchoolAnalyticsDashboard() {
   ];
 
   async function downloadDesignedAnalyticsReport() {
+    if (exportingReport) return;
+    setExportingReport(true);
+    try {
     const attendanceTone: DashboardMetric['tone'] = kpis.rate >= 95 ? 'green' : kpis.rate >= 80 ? 'amber' : 'red';
     const metrics: DashboardMetric[] = [
       { label: 'Attendance Rate', value: `${kpis.rate}%`, tone: attendanceTone, progress: kpis.rate },
@@ -929,6 +933,38 @@ export default function SchoolAnalyticsDashboard() {
       ],
       metrics,
       insights: insights.map(insight => ({ type: insight.type, message: insight.msg })),
+      charts: [
+        {
+          type: 'line',
+          title: 'Attendance Rate Trend',
+          labels: dailyTrend.slice(-30).map(day => new Date(`${day.date}T00:00:00`).toLocaleDateString('en-PH', { month: 'short', day: 'numeric' })),
+          values: dailyTrend.slice(-30).map(day => day.rate),
+          suffix: '%',
+          colors: ['#0f766e'],
+        },
+        {
+          type: 'donut',
+          title: 'Attendance Status Distribution',
+          labels: ['Present', 'Absent', 'Late', 'Excused'],
+          values: [kpis.present, kpis.absent, kpis.late, kpis.excused],
+          colors: ['#10b981', '#f43f5e', '#f59e0b', '#3b82f6'],
+        },
+        {
+          type: 'bar',
+          title: 'Attendance by Section',
+          labels: [...sectionRates].sort((a, b) => b.rate - a.rate).slice(0, 10).map(section => section.name),
+          values: [...sectionRates].sort((a, b) => b.rate - a.rate).slice(0, 10).map(section => section.rate),
+          suffix: '%',
+          colors: ['#0ea5e9', '#14b8a6', '#22c55e', '#84cc16', '#eab308', '#f59e0b'],
+        },
+        {
+          type: 'bar',
+          title: 'Academic Performance by Subject',
+          labels: [...subjectPerformance].sort((a, b) => b.averageGrade - a.averageGrade).slice(0, 10).map(subject => subject.code || subject.name),
+          values: [...subjectPerformance].sort((a, b) => b.averageGrade - a.averageGrade).slice(0, 10).map(subject => subject.averageGrade),
+          colors: ['#8b5cf6', '#6366f1', '#3b82f6', '#06b6d4', '#14b8a6'],
+        },
+      ],
       sheets: [
         {
           name: 'Attendance Trend',
@@ -960,6 +996,11 @@ export default function SchoolAnalyticsDashboard() {
         }] : []),
       ],
     });
+    } catch (error) {
+      alert(error instanceof Error ? `Could not create the visual report: ${error.message}` : 'Could not create the visual analytics report.');
+    } finally {
+      setExportingReport(false);
+    }
   }
 
   /* ─── Filtered at-risk students (for search) ─── */
@@ -1335,9 +1376,10 @@ export default function SchoolAnalyticsDashboard() {
               </button>
               <button
                 onClick={() => void downloadDesignedAnalyticsReport()}
-                className="bg-sky-600 hover:bg-sky-700 text-white px-3 py-2 rounded-lg text-sm font-medium flex items-center gap-1.5 transition-colors cursor-pointer"
+                disabled={exportingReport}
+                className="bg-sky-600 hover:bg-sky-700 text-white px-3 py-2 rounded-lg text-sm font-medium flex items-center gap-1.5 transition-colors cursor-pointer disabled:cursor-wait disabled:opacity-60"
               >
-                <FileSpreadsheet size={14} /> Designed Excel Report
+                <FileSpreadsheet size={14} /> {exportingReport ? 'Building report...' : 'Visual Analytics Report (.xlsx)'}
               </button>
               <button
                 onClick={() => downloadCsv('section_rates', sectionRates, sectionRatesColumns)}
