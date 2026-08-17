@@ -1,5 +1,20 @@
 project_id = "classpulse"
 
+[auth]
+site_url = "http://localhost:3000"
+additional_redirect_urls = ["https://classpulse.pages.dev/reset-password"]
+
+[auth.mfa.totp]
+enroll_enabled = true
+verify_enabled = true
+
+[auth.email]
+max_frequency = "1m"
+otp_length = 8
+
+[storage.vector]
+enabled = false
+
 # Parent sessions are ClassPulse JWTs signed with APP_JWT_SECRET, not Supabase
 # Auth JWTs. Gateway verification is disabled only for these functions; each
 # handler verifies the parent token itself before any service-role operation.
